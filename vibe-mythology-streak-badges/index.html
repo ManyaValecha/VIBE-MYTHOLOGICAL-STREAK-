@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Google AI Studio App</title>
+    <script>
+      // Global polyfill for PouchDB / other third-party libraries in browser
+      if (typeof global === 'undefined') {
+        window.global = window;
+      }
+
+      // Visual Error Boundary to render any browser-side JS crashes directly on the screen
+      window.addEventListener('error', function(e) {
+        var msg = e.message || '';
+        if (
+          msg.indexOf('WebSocket') !== -1 || 
+          msg.indexOf('closed without opened') !== -1 || 
+          msg.indexOf('vite') !== -1 || 
+          msg.indexOf('HMR') !== -1
+        ) {
+          return; // Ignore benign HMR/WebSocket errors
+        }
+        setTimeout(function() {
+          var div = document.getElementById('runtime-error-overlay');
+          if (!div) {
+            div = document.createElement('div');
+            div.id = 'runtime-error-overlay';
+            div.style.position = 'fixed';
+            div.style.top = '0';
+            div.style.left = '0';
+            div.style.width = '100%';
+            div.style.maxHeight = '50vh';
+            div.style.overflowY = 'auto';
+            div.style.background = '#7f1d1d';
+            div.style.color = '#fecaca';
+            div.style.padding = '15px';
+            div.style.fontFamily = 'monospace';
+            div.style.fontSize = '12px';
+            div.style.zIndex = '999999';
+            div.style.whiteSpace = 'pre-wrap';
+            div.style.borderBottom = '3px solid #dc2626';
+            document.body.appendChild(div);
+          }
+          div.innerHTML = '<strong>[Runtime Error]</strong> ' + e.message + ' at ' + e.filename + ':' + e.lineno + ':' + e.colno + '\n' + (e.error ? e.error.stack : '');
+        }, 100);
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        var reason = e.reason;
+        var msg = '';
+        if (reason) {
+          msg = typeof reason === 'string' ? reason : (reason.message || '');
+          if (reason.stack) {
+            msg += ' ' + reason.stack;
+          }
+        }
+        if (
+          msg.indexOf('WebSocket') !== -1 || 
+          msg.indexOf('closed without opened') !== -1 || 
+          msg.indexOf('vite') !== -1 || 
+          msg.indexOf('HMR') !== -1
+        ) {
+          return; // Ignore benign HMR/WebSocket rejections
+        }
+        setTimeout(function() {
+          var div = document.getElementById('runtime-error-overlay');
+          if (!div) {
+            div = document.createElement('div');
+            div.id = 'runtime-error-overlay';
+            div.style.position = 'fixed';
+            div.style.top = '0';
+            div.style.left = '0';
+            div.style.width = '100%';
+            div.style.maxHeight = '50vh';
+            div.style.overflowY = 'auto';
+            div.style.background = '#7f1d1d';
+            div.style.color = '#fecaca';
+            div.style.padding = '15px';
+            div.style.fontFamily = 'monospace';
+            div.style.fontSize = '12px';
+            div.style.zIndex = '999999';
+            div.style.whiteSpace = 'pre-wrap';
+            div.style.borderBottom = '3px solid #dc2626';
+            document.body.appendChild(div);
+          }
+          div.innerHTML = '<strong>[Unhandled Rejection]</strong> ' + (e.reason ? (e.reason.message || e.reason) : 'Promise rejected');
+          if (e.reason && e.reason.stack) {
+            div.innerHTML += '\n' + e.reason.stack;
+          }
+        }, 100);
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

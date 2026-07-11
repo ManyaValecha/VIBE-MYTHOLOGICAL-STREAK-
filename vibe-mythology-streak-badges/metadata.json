@@ -1,0 +1,6 @@
+{
+  "name": "ViBe Daily Streak Badges",
+  "description": "An interactive gamified streak engine themed around the Vikram-Betaal mythology, rewarding consistent daily learning presence with verifiable, LinkedIn-shareable credential cards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
