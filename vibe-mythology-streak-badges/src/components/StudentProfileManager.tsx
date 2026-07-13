@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { User, UserPlus, LogOut, Award, ChevronDown } from 'lucide-react';
-import { UserStreakState } from '../types';
+import { User, UserPlus, LogOut, Award, ChevronDown, AlertTriangle } from 'lucide-react';
+
+/** Only allow safe alphanumeric usernames (no HTML/script injection possible) */
+const USERNAME_REGEX = /^[a-zA-Z0-9 _\-]{2,40}$/;
+
+/** Safely parse localStorage value. Returns null on any failure. */
+function safeParseJSON<T>(value: string | null): T | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    // Must be a plain object, not an array or primitive
+    if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) return null;
+    return parsed as T;
+  } catch {
+    return null;
+  }
+}
 
 interface StudentProfileManagerProps {
   currentUser: string | null;
@@ -13,25 +28,36 @@ export const StudentProfileManager: React.FC<StudentProfileManagerProps> = ({ cu
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [newUsername, setNewUsername] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('vibe_profiles');
-      if (stored) {
-        setProfiles(JSON.parse(stored));
+    // Safely load profiles — discard corrupt data
+    const stored = safeParseJSON<Record<string, any>>(localStorage.getItem('vibe_profiles'));
+    if (stored) {
+      // Strip any keys that aren't valid usernames to prevent XSS from stored data
+      const sanitized: Record<string, any> = {};
+      for (const key of Object.keys(stored)) {
+        if (USERNAME_REGEX.test(key)) {
+          sanitized[key] = stored[key];
+        }
       }
-    } catch (e) {
-      console.error("Failed to load profiles", e);
+      setProfiles(sanitized);
     }
   }, [isOpen]);
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError('');
     const cleanName = newUsername.trim();
-    if (!cleanName) return;
 
-    if (profiles[cleanName]) {
-      alert("This student name is already registered!");
+    // Strict validation — reject anything that doesn't match our safe pattern
+    if (!USERNAME_REGEX.test(cleanName)) {
+      setValidationError('Name must be 2–40 chars: letters, numbers, spaces, - or _ only.');
+      return;
+    }
+
+    if (Object.keys(profiles).some(k => k.toLowerCase() === cleanName.toLowerCase())) {
+      setValidationError('This student name is already registered!');
       return;
     }
 
@@ -42,6 +68,8 @@ export const StudentProfileManager: React.FC<StudentProfileManagerProps> = ({ cu
   };
 
   const handleSelectProfile = (username: string) => {
+    // Re-validate even existing profile keys before trusting them
+    if (!USERNAME_REGEX.test(username)) return;
     onSwitchUser(username);
     setIsOpen(false);
   };
@@ -96,8 +124,8 @@ export const StudentProfileManager: React.FC<StudentProfileManagerProps> = ({ cu
                   <div>
                     <div className="text-sm font-bold text-slate-200">{username}</div>
                     <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
-                      <span className="flex items-center gap-0.5 text-amber-400"><Award className="w-3 h-3" /> {state.karmaPoints || 0}</span>
-                      <span>🔥 {state.currentStreak || 0} Streak</span>
+                      <span className="flex items-center gap-0.5 text-amber-400"><Award className="w-3 h-3" /> {(state as any).karmaPoints || 0}</span>
+                      <span>🔥 {(state as any).currentStreak || 0} Streak</span>
                     </div>
                   </div>
                 </div>
@@ -116,14 +144,24 @@ export const StudentProfileManager: React.FC<StudentProfileManagerProps> = ({ cu
                   type="text"
                   placeholder="Student Name..."
                   value={newUsername}
-                  onChange={(e) => setNewUsername(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  onChange={(e) => { setNewUsername(e.target.value); setValidationError(''); }}
+                  maxLength={40}
+                  pattern="[a-zA-Z0-9 _\-]{2,40}"
+                  className={`w-full bg-slate-900 border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 transition-colors ${
+                    validationError ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500' : 'border-slate-700 focus:border-indigo-500 focus:ring-indigo-500'
+                  }`}
                 />
+                {validationError && (
+                  <div className="flex items-start gap-1.5 text-[10px] text-rose-400 font-mono">
+                    <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                    <span>{validationError}</span>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2 rounded-lg transition-colors">
                     Register
                   </button>
-                  <button type="button" onClick={() => setIsRegistering(false)} className="px-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-lg transition-colors">
+                  <button type="button" onClick={() => { setIsRegistering(false); setValidationError(''); }} className="px-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-lg transition-colors">
                     Cancel
                   </button>
                 </div>

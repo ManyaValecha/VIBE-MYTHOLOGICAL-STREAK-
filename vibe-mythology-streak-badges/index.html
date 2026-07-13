@@ -3,6 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Security: Prevent MIME sniffing -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <!-- Security: Prevent embedding in iframes (clickjacking protection) -->
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <!-- Security: Referrer Policy -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <title>ViBe Mythology Streak Portal</title>
     <script>
       // Global polyfill for PouchDB / other third-party libraries in browser
@@ -10,84 +16,41 @@
         window.global = window;
       }
 
-      // Visual Error Boundary to render any browser-side JS crashes directly on the screen
-      window.addEventListener('error', function(e) {
-        var msg = e.message || '';
-        if (
-          msg.indexOf('WebSocket') !== -1 || 
-          msg.indexOf('closed without opened') !== -1 || 
-          msg.indexOf('vite') !== -1 || 
-          msg.indexOf('HMR') !== -1
-        ) {
-          return; // Ignore benign HMR/WebSocket errors
-        }
+      // Safe helper to display error text WITHOUT using innerHTML (XSS prevention)
+      function showErrorOverlay(label, message, stack) {
         setTimeout(function() {
           var div = document.getElementById('runtime-error-overlay');
           if (!div) {
             div = document.createElement('div');
             div.id = 'runtime-error-overlay';
-            div.style.position = 'fixed';
-            div.style.top = '0';
-            div.style.left = '0';
-            div.style.width = '100%';
-            div.style.maxHeight = '50vh';
-            div.style.overflowY = 'auto';
-            div.style.background = '#7f1d1d';
-            div.style.color = '#fecaca';
-            div.style.padding = '15px';
-            div.style.fontFamily = 'monospace';
-            div.style.fontSize = '12px';
-            div.style.zIndex = '999999';
-            div.style.whiteSpace = 'pre-wrap';
-            div.style.borderBottom = '3px solid #dc2626';
+            div.style.cssText = 'position:fixed;top:0;left:0;width:100%;max-height:50vh;overflow-y:auto;background:#7f1d1d;color:#fecaca;padding:15px;font-family:monospace;font-size:12px;z-index:999999;white-space:pre-wrap;border-bottom:3px solid #dc2626;';
             document.body.appendChild(div);
           }
-          div.innerHTML = '<strong>[Runtime Error]</strong> ' + e.message + ' at ' + e.filename + ':' + e.lineno + ':' + e.colno + '\n' + (e.error ? e.error.stack : '');
+          // Use textContent to safely insert text — never innerHTML with untrusted data
+          div.textContent = '[' + label + '] ' + message + (stack ? '\n' + stack : '');
         }, 100);
+      }
+
+      var BENIGN_PATTERNS = ['WebSocket', 'closed without opened', 'vite', 'HMR'];
+      function isBenign(msg) {
+        return BENIGN_PATTERNS.some(function(p) { return msg && msg.indexOf(p) !== -1; });
+      }
+
+      // Visual Error Boundary to render any browser-side JS crashes directly on the screen
+      window.addEventListener('error', function(e) {
+        var msg = e.message || '';
+        if (isBenign(msg)) return;
+        showErrorOverlay('Runtime Error', msg + ' at ' + e.filename + ':' + e.lineno, e.error ? e.error.stack : '');
       });
+
       window.addEventListener('unhandledrejection', function(e) {
         var reason = e.reason;
         var msg = '';
         if (reason) {
           msg = typeof reason === 'string' ? reason : (reason.message || '');
-          if (reason.stack) {
-            msg += ' ' + reason.stack;
-          }
         }
-        if (
-          msg.indexOf('WebSocket') !== -1 || 
-          msg.indexOf('closed without opened') !== -1 || 
-          msg.indexOf('vite') !== -1 || 
-          msg.indexOf('HMR') !== -1
-        ) {
-          return; // Ignore benign HMR/WebSocket rejections
-        }
-        setTimeout(function() {
-          var div = document.getElementById('runtime-error-overlay');
-          if (!div) {
-            div = document.createElement('div');
-            div.id = 'runtime-error-overlay';
-            div.style.position = 'fixed';
-            div.style.top = '0';
-            div.style.left = '0';
-            div.style.width = '100%';
-            div.style.maxHeight = '50vh';
-            div.style.overflowY = 'auto';
-            div.style.background = '#7f1d1d';
-            div.style.color = '#fecaca';
-            div.style.padding = '15px';
-            div.style.fontFamily = 'monospace';
-            div.style.fontSize = '12px';
-            div.style.zIndex = '999999';
-            div.style.whiteSpace = 'pre-wrap';
-            div.style.borderBottom = '3px solid #dc2626';
-            document.body.appendChild(div);
-          }
-          div.innerHTML = '<strong>[Unhandled Rejection]</strong> ' + (e.reason ? (e.reason.message || e.reason) : 'Promise rejected');
-          if (e.reason && e.reason.stack) {
-            div.innerHTML += '\n' + e.reason.stack;
-          }
-        }, 100);
+        if (isBenign(msg)) return;
+        showErrorOverlay('Unhandled Rejection', msg, reason && reason.stack ? reason.stack : '');
       });
     </script>
   </head>
@@ -96,4 +59,5 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
+
 
