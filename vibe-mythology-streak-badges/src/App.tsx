@@ -114,31 +114,39 @@ const DEFAULT_STATE: UserStreakState = {
   ]
 };
 
-const COURSE_VIDEOS: Record<string, { title: string; embedUrl: string; description: string }> = {
+// ViBe Official student portal link — opens within an iframe or as direct link
+const VIBE_STUDENT_PORTAL = "https://vibe.vicharanashala.ai/student";
+
+const COURSE_VIDEOS: Record<string, { title: string; embedUrl: string; description: string; portalUrl: string }> = {
   "vibe-github-tutorial": {
-    title: "Git & GitHub Crash Course for Beginners",
-    embedUrl: "https://www.youtube.com/embed/RGOj5yH7evk",
-    description: "Learn essential version control concepts: staging, commits, branches, pushing/pulling, and conflict resolution."
+    title: "Git & GitHub — ViBe Official Tutorial",
+    embedUrl: "", // Portal-only content
+    portalUrl: `${VIBE_STUDENT_PORTAL}`,
+    description: "Access the official ViBe Git & GitHub curriculum — version control, SSH keys, branches, pull requests, and collaborative workflows."
   },
   "vibe-typescript": {
-    title: "TypeScript Crash Course - Master Static Typing",
-    embedUrl: "https://www.youtube.com/embed/d56mG7DezGs",
-    description: "Explore compiler configs, primitive/object types, interface schemas, union/intersection features, and class structures."
+    title: "TypeScript — ViBe Official Course",
+    embedUrl: "",
+    portalUrl: `${VIBE_STUDENT_PORTAL}`,
+    description: "Access the official ViBe TypeScript lessons — compiler configs, primitive/object types, interface schemas, generics, and decorators."
   },
   "vibe-react": {
-    title: "React JS Complete Fundamentals Course",
-    embedUrl: "https://www.youtube.com/embed/SqcY0GlETPk",
-    description: "Learn component structures, properties, standard hooks (useState, useEffect), and high-contrast styling integration."
+    title: "React JS — ViBe Official Course",
+    embedUrl: "",
+    portalUrl: `${VIBE_STUDENT_PORTAL}`,
+    description: "Access the official ViBe React curriculum — components, hooks, state management, and production-grade application architecture."
   },
   "vibe-express": {
-    title: "Express JS Backend REST API Tutorial",
-    embedUrl: "https://www.youtube.com/embed/SccSCuHh3K4",
-    description: "Build robust Express backend servers, structure API routers, parse requests, and integrate secure middleware validation."
+    title: "Express JS — ViBe Official Course",
+    embedUrl: "",
+    portalUrl: `${VIBE_STUDENT_PORTAL}`,
+    description: "Access the official ViBe Express backend lessons — REST APIs, middleware, authentication, and database integration."
   },
   "vibe-mongo-db": {
-    title: "MongoDB Schema Modeling Crash Course",
-    embedUrl: "https://www.youtube.com/embed/ofme2o29094",
-    description: "Master document databases, schema-less models, CRUD commands, collections, and complex query expressions."
+    title: "MongoDB — ViBe Official Course",
+    embedUrl: "",
+    portalUrl: `${VIBE_STUDENT_PORTAL}`,
+    description: "Access the official ViBe MongoDB modules — document modeling, aggregation pipelines, and schema design patterns."
   }
 };
 
@@ -146,7 +154,7 @@ const REAL_COURSES = [
   {
     id: "vibe-github-tutorial",
     name: "GitHub Version Control",
-    instructor: "Acharya Manya Valecha (Core Architect)",
+    instructor: "ViBe Core Architect",
     category: "Github Tutorial",
     description: "Master the base protocols of modern version control. Establish secure SSH keys, manage branching systems, and collaborate with team members seamlessly.",
     lessons: [
@@ -160,7 +168,7 @@ const REAL_COURSES = [
   {
     id: "vibe-typescript",
     name: "TypeScript Core Foundations",
-    instructor: "Acharya Manya Valecha (Core Architect)",
+    instructor: "ViBe Core Architect",
     category: "Typescript",
     description: "Deep dive into static typing, user-defined types, decorators, advanced classes, IoC dependency injection containers, and modern software design patterns.",
     lessons: [
@@ -189,7 +197,7 @@ const REAL_COURSES = [
   {
     id: "vibe-react",
     name: "React & TSX Development",
-    instructor: "Acharya Manya Valecha (Core Architect)",
+    instructor: "ViBe Core Architect",
     category: "React",
     description: "Build performant client-side single page applications. Master advanced state management with Zustand, lazy loading, React memoization, and bundle optimization.",
     lessons: [
@@ -208,7 +216,7 @@ const REAL_COURSES = [
   {
     id: "vibe-express",
     name: "Express Scalable API Backends",
-    instructor: "Acharya Manya Valecha (Core Architect)",
+    instructor: "ViBe Core Architect",
     category: "Express",
     description: "Build highly scalable RESTful API backends. Master MVC project architectures, middleware pipeline filters, body validations, and clean repository design patterns.",
     lessons: [
@@ -227,7 +235,7 @@ const REAL_COURSES = [
   {
     id: "vibe-mongo-db",
     name: "MongoDB & Schema Modeling",
-    instructor: "Acharya Manya Valecha (Core Architect)",
+    instructor: "ViBe Core Architect",
     category: "Mongo DB",
     description: "Master document database modeling. Structure CRUD operation queries, harness the powerful Aggregation framework pipeline, and write multi-document ACID transactions.",
     lessons: [
@@ -323,8 +331,24 @@ function parseInlineFormatting(text: string): React.ReactNode {
   return parts.length > 0 ? parts : text;
 }
 
+import { StudentProfileManager } from './components/StudentProfileManager';
+
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<string | null>(() => {
+    return localStorage.getItem('vibe_current_profile');
+  });
+
   const [state, setState] = useState<UserStreakState>(() => {
+    const activeUser = localStorage.getItem('vibe_current_profile');
+    if (activeUser) {
+      try {
+        const allProfiles = JSON.parse(localStorage.getItem('vibe_profiles') || '{}');
+        if (allProfiles[activeUser]) {
+          return allProfiles[activeUser];
+        }
+      } catch(e) {}
+    }
+    // Fallback for legacy state
     const saved = localStorage.getItem('vibe_streak_state');
     if (saved) {
       try {
@@ -335,6 +359,30 @@ export default function App() {
     }
     return DEFAULT_STATE;
   });
+
+  const handleSwitchUser = (username: string) => {
+    try {
+      const allProfiles = JSON.parse(localStorage.getItem('vibe_profiles') || '{}');
+      if (allProfiles[username]) {
+        setState(allProfiles[username]);
+      } else {
+        // New user registration
+        const newState = { ...DEFAULT_STATE };
+        allProfiles[username] = newState;
+        localStorage.setItem('vibe_profiles', JSON.stringify(allProfiles));
+        setState(newState);
+      }
+      setCurrentUser(username);
+      localStorage.setItem('vibe_current_profile', username);
+      triggerNotification(`Welcome, ${username}! Let the streak begin.`, 'info');
+    } catch(e) {}
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('vibe_current_profile');
+    setState(DEFAULT_STATE);
+  };
 
   const [activeShareBadge, setActiveShareBadge] = useState<Badge | null>(null);
   const [activeMilestoneBadge, setActiveMilestoneBadge] = useState<Badge | null>(null);
@@ -355,7 +403,22 @@ export default function App() {
   const [isGeneratingRiddle, setIsGeneratingRiddle] = useState<boolean>(false);
   const [showScrollChamber, setShowScrollChamber] = useState<boolean>(false);
   const [activeScrollTab, setActiveScrollTab] = useState<'scroll' | 'video'>('scroll');
-  const [isSimulatedOffline, setIsSimulatedOffline] = useState<boolean>(false);
+  const [isSimulatedOffline, setIsSimulatedOffline] = useState<boolean>(!navigator.onLine);
+  
+  // Track actual device Wi-Fi / network state
+  useEffect(() => {
+    const handleOnline = () => setIsSimulatedOffline(false);
+    const handleOffline = () => setIsSimulatedOffline(true);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState<boolean>(false);
 
@@ -488,8 +551,18 @@ export default function App() {
 
   // Sync state to local storage
   useEffect(() => {
-    localStorage.setItem('vibe_streak_state', JSON.stringify(state));
-  }, [state]);
+    if (currentUser) {
+      try {
+        const allProfiles = JSON.parse(localStorage.getItem('vibe_profiles') || '{}');
+        allProfiles[currentUser] = state;
+        localStorage.setItem('vibe_profiles', JSON.stringify(allProfiles));
+      } catch (e) {
+        console.error('Failed to save profile state', e);
+      }
+    } else {
+      localStorage.setItem('vibe_streak_state', JSON.stringify(state));
+    }
+  }, [state, currentUser]);
 
   // Handle autoplay constraints for mythological soundscapes
   useEffect(() => {
@@ -828,7 +901,82 @@ export default function App() {
 
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
-        
+
+        {/* === OFFICIAL ViBe PLATFORM BANNER === */}
+        <div className="relative mb-6 rounded-2xl overflow-hidden border border-indigo-500/20 shadow-[0_0_60px_rgba(99,102,241,0.12)]">
+          {/* Animated gradient background */}
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-950 via-slate-950 to-purple-950" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,rgba(99,102,241,0.18)_0%,transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_right,rgba(168,85,247,0.12)_0%,transparent_60%)]" />
+          {/* Shimmer line top */}
+          <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-400/60 to-transparent" />
+          {/* Shimmer line bottom */}
+          <div className="absolute inset-x-0 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-purple-400/40 to-transparent" />
+          {/* Floating particles */}
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute rounded-full bg-indigo-400/20 animate-pulse pointer-events-none"
+              style={{
+                width: `${4 + i * 2}px`,
+                height: `${4 + i * 2}px`,
+                left: `${10 + i * 15}%`,
+                top: `${20 + (i % 3) * 30}%`,
+                animationDelay: `${i * 0.4}s`,
+                animationDuration: `${2 + i * 0.5}s`
+              }}
+            />
+          ))}
+          <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4">
+            {/* Left: Institution badge */}
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.3)]">
+                <span className="text-2xl">🏛️</span>
+              </div>
+              <div>
+                <p className="text-[9px] font-mono uppercase tracking-[0.25em] text-indigo-400/80 font-bold">
+                  VICHARANSHALA LAB · IIT ROPAR
+                </p>
+                <h1 className="text-lg sm:text-xl font-bold font-serif tracking-wide text-slate-100 leading-tight">
+                  ViBe Platform
+                  <span className="ml-2 text-sm font-mono font-normal text-indigo-300/70">Gamification Tab</span>
+                </h1>
+              </div>
+            </div>
+            {/* Center: Title pill */}
+            <div className="hidden md:flex flex-col items-center text-center">
+              <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Active Feature</span>
+              <span className="text-sm font-serif font-bold text-amber-400 mt-0.5">🔥 Daily Streak Badges</span>
+            </div>
+            {/* Right: Links & Profile */}
+            <div className="flex items-center gap-2.5">
+              <StudentProfileManager 
+                currentUser={currentUser} 
+                onSwitchUser={handleSwitchUser} 
+                onLogout={handleLogout} 
+              />
+              <div className="h-6 w-px bg-slate-800 hidden sm:block"></div>
+              <a
+                href="https://vibe.vicharanashala.ai"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[10px] font-mono font-bold bg-indigo-600/80 hover:bg-indigo-500 text-white border border-indigo-400/30 transition-all shadow-md hover:shadow-indigo-500/30 hover:scale-105 active:scale-95"
+              >
+                <span>🌐</span> ViBe Portal
+              </a>
+              <a
+                href="https://vibe.vicharanashala.ai/student"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[10px] font-mono font-bold bg-amber-600/70 hover:bg-amber-500 text-white border border-amber-400/30 transition-all shadow-md hover:shadow-amber-500/30 hover:scale-105 active:scale-95"
+              >
+                <span>🎓</span> Student Videos
+              </a>
+            </div>
+          </div>
+        </div>
+        {/* === END BANNER === */}
+
         {/* Cinematic Header with Vikram & Betaal */}
         <CinematicHeader
           systemDate={state.systemDate}
@@ -836,7 +984,7 @@ export default function App() {
           longestStreak={state.longestStreak}
           activeFlair={state.activeFlair}
           onShowStoryOverlay={() => setShowStoryOverlay(true)}
-          userName="manyavalechaofficial"
+          userName={currentUser || "Guest"}
         />
 
         {/* Astro-Karmic Peer Duel Board */}
@@ -1415,7 +1563,7 @@ export default function App() {
               currentStreak={state.currentStreak}
               longestStreak={state.longestStreak}
               karmaPoints={state.karmaPoints}
-              userName="manyavalechaofficial"
+              userName={currentUser || "Guest"}
               activeFlair={state.activeFlair}
               logs={state.logs}
               systemDate={state.systemDate}
@@ -1464,7 +1612,7 @@ export default function App() {
             badge={activeShareBadge}
             streakCount={state.currentStreak}
             courses={REAL_COURSES}
-            userEmail="manyavalechaofficial@gmail.com"
+            userEmail="seeker@vibe.edu"
             onClose={() => setActiveShareBadge(null)}
           />
         )}
@@ -1645,18 +1793,43 @@ export default function App() {
                             )}
                           </div>
                           
-                          {/* Youtube Iframe Embed */}
-                          <div className="aspect-video w-full bg-slate-900 rounded-xl overflow-hidden border border-slate-800 shadow-inner relative">
-                            <iframe
-                              src={videoInfo.embedUrl}
-                              title={videoInfo.title}
-                              frameBorder="0"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                              allowFullScreen
-                              referrerPolicy="no-referrer"
-                              className="absolute inset-0 w-full h-full"
-                            />
-                          </div>
+                          {/* ViBe Official Student Portal Video Gateway */}
+                          <a
+                            href={videoInfo.portalUrl || "https://vibe.vicharanashala.ai/student"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group flex flex-col items-center justify-center w-full aspect-video bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 rounded-xl overflow-hidden border border-indigo-500/20 shadow-inner relative hover:border-indigo-400/40 transition-all duration-300 hover:shadow-[0_0_40px_rgba(99,102,241,0.2)] cursor-pointer no-underline"
+                            onClick={() => {
+                              if (!isLogged) {
+                                handleLogActivity(
+                                  `video-${selectedCourseId}`,
+                                  `Watched ViBe official lecture: "${videoInfo.title}"`,
+                                  'video',
+                                  15
+                                );
+                              }
+                            }}
+                          >
+                            {/* Radial glow */}
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.15)_0%,transparent_65%)] group-hover:opacity-150 transition-opacity" />
+                            {/* Animated ring */}
+                            <div className="absolute w-28 h-28 rounded-full border border-indigo-500/20 animate-ping opacity-20 group-hover:opacity-40" />
+                            <div className="absolute w-40 h-40 rounded-full border border-purple-500/10 animate-ping opacity-10" style={{animationDuration:'2.4s'}} />
+                            {/* Play icon */}
+                            <div className="relative z-10 w-16 h-16 rounded-full bg-indigo-600/80 border border-indigo-400/40 flex items-center justify-center shadow-[0_0_30px_rgba(99,102,241,0.5)] group-hover:scale-110 transition-transform duration-300 mb-4">
+                              <Play className="w-7 h-7 text-white fill-white ml-1" />
+                            </div>
+                            <p className="relative z-10 text-sm font-bold font-serif text-slate-100 text-center px-4 group-hover:text-indigo-200 transition-colors">
+                              {videoInfo.title}
+                            </p>
+                            <p className="relative z-10 text-[10px] font-mono text-slate-400 mt-1.5 text-center px-6">
+                              Opens official ViBe Student Portal at vicharanashala.ai
+                            </p>
+                            <div className="relative z-10 mt-3 flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-600/60 border border-indigo-400/30 text-[10px] font-mono text-white font-bold group-hover:bg-indigo-500/80 transition-all">
+                              <span>🎓</span>
+                              <span>Watch on ViBe Portal →</span>
+                            </div>
+                          </a>
                           
                           {/* Lecture Attendance Confirmation Button */}
                           <div className="p-4 bg-slate-950/80 border border-slate-850 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">

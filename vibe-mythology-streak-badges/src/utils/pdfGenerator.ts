@@ -85,7 +85,7 @@ export function generateMonthlyPDF(state: UserStreakState) {
   const statCardHeight = 22;
 
   const stats = [
-    { label: 'DISCIPLINE SEEKER', value: 'manyavalechaofficial' },
+    { label: 'DISCIPLINE SEEKER', value: 'vibeseeker' },
     { label: 'ACTIVE STREAK', value: `${state.currentStreak} Days`, desc: `Max Record: ${state.longestStreak} d` },
     { label: 'KARMIC BALANCE', value: `${state.karmaPoints} KP`, desc: 'Total study weight' },
     { label: 'GILDED MILESTONES', value: `${state.unlockedBadges.length} / 6`, desc: 'Unlocked Badges' }

@@ -68,7 +68,7 @@ self.addEventListener('fetch', (event) => {
                 {
                   id: "vibe-typescript",
                   name: "TypeScript Scroll Mastery",
-                  instructor: "Acharya Manya (Core Creator)",
+                  instructor: "ViBe Core Architect",
                   category: "Typescript",
                   description: "The ancient vow of type safety and robust software structures",
                   lessons: [

@@ -19,14 +19,14 @@ export function AstroKarmicDuelBoard({
 }: AstroKarmicDuelBoardProps) {
   // Query Parameters State for Active Duel
   const [hasActiveDuel, setHasActiveDuel] = useState(false);
-  const [challengerName, setChallengerName] = useState('Acharya Manya');
+  const [challengerName, setChallengerName] = useState('Acharya Dev');
   const [challengerStreak, setChallengerStreak] = useState(15);
   const [challengerKarma, setChallengerKarma] = useState(350);
   const [challengerAvatar, setChallengerAvatar] = useState('🔮');
 
   // Peer Challenge Scroll Creator State
   const [showForger, setShowForger] = useState(false);
-  const [myAlias, setMyAlias] = useState('Manya Valecha');
+  const [myAlias, setMyAlias] = useState('Sage Seeker');
   const [myAvatar, setMyAvatar] = useState('👑');
   const [copiedLink, setCopiedLink] = useState('');
   const [isCopied, setIsCopied] = useState(false);
@@ -219,7 +219,7 @@ export function AstroKarmicDuelBoard({
                   </div>
                   <div>
                     <h3 className="text-base font-cinzel-deco font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">
-                      manyavalechaofficial
+                      vibeseeker
                     </h3>
                     <p className="text-xs text-indigo-400 font-space font-bold">
                       🔮 Discipline Guardian
@@ -353,7 +353,7 @@ export function AstroKarmicDuelBoard({
                       type="text"
                       value={myAlias}
                       onChange={(e) => setMyAlias(e.target.value)}
-                      placeholder="e.g. Sage Manya, King Dev"
+                      placeholder="e.g. Sage Dev, King Vikram"
                       className="w-full bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-amber-500/50 rounded-xl px-4 py-2 text-xs text-slate-200 font-mono transition-all outline-none"
                     />
                   </div>

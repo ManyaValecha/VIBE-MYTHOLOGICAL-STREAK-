@@ -174,6 +174,24 @@ export const HallOfRecords: React.FC<HallOfRecordsProps> = ({
       });
   }, []);
 
+  // Post the user's current score to the global in-memory leaderboard API
+  useEffect(() => {
+    if (userName && userName !== "Guest" && userName !== "vibeseeker") {
+      fetch('/api/leaderboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: userName,
+          title: currentStreak >= 15 ? "Vow Master Seeker" : "Novice Chronicle Seeker",
+          streak: Math.max(currentStreak, longestStreak),
+          karma: karmaPoints,
+          avatarSeed: "🎓",
+          status: currentStreak > 0 ? "active" : "dormant"
+        })
+      }).catch(err => console.warn("Failed to update global leaderboard", err));
+    }
+  }, [userName, currentStreak, longestStreak, karmaPoints]);
+
   // Dynamic user entry compiled with real metrics
   const userEntry: Omit<LeaderboardEntry, 'rank' | 'isUser'> = {
     name: userName,
@@ -191,11 +209,34 @@ export const HallOfRecords: React.FC<HallOfRecordsProps> = ({
     // If we have real Vibe contributors, merge them with mythological baseline or display them!
     const baseline = vibeContributors.length > 0 ? vibeContributors : baseEntries;
     
-    // Check if user is already present in baseline (to avoid duplicate display of user)
-    const filteredBaseline = baseline.filter(item => item.name.toLowerCase() !== userName.toLowerCase());
+    // Load local multi-user student profiles
+    const localProfiles: Omit<LeaderboardEntry, 'rank' | 'isUser'>[] = [];
+    try {
+      const stored = localStorage.getItem('vibe_profiles');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        for (const [name, pState] of Object.entries<any>(parsed)) {
+          // Exclude the currently active user (we add them later to ensure fresh stats)
+          if (name.toLowerCase() !== userName.toLowerCase()) {
+            localProfiles.push({
+              name,
+              title: (pState.currentStreak || 0) >= 15 ? "Vow Master Seeker" : "Novice Chronicle Seeker",
+              streak: Math.max(pState.currentStreak || 0, pState.longestStreak || 0),
+              karma: pState.karmaPoints || 0,
+              avatarSeed: "🎓",
+              status: (pState.currentStreak || 0) > 0 ? "active" : "dormant"
+            });
+          }
+        }
+      }
+    } catch(e) {}
+
+    // Exclude any names from baseline that are already in local profiles or are the current user
+    const namesToExclude = [userName.toLowerCase(), ...localProfiles.map(p => p.name.toLowerCase())];
+    const filteredBaseline = baseline.filter(item => !namesToExclude.includes(item.name.toLowerCase()));
     
-    // Merge baseline and user
-    const list = [...filteredBaseline, userEntry];
+    // Merge baseline, other local students, and current active user
+    const list = [...filteredBaseline, ...localProfiles, userEntry];
     
     // Sort descending by streak, then by karma
     list.sort((a, b) => {

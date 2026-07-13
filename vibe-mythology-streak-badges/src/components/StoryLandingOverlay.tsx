@@ -85,33 +85,59 @@ export const StoryLandingOverlay: React.FC<StoryLandingOverlayProps> = ({ onComp
   const relicWireRef = useRef<THREE.LineSegments | null>(null);
   const spotLightRef = useRef<THREE.SpotLight | null>(null);
 
-  // Initialize browser-synthesized soundtrack
+  // Initialize browser-synthesized soundtrack — Ceremonial Shankh Bell Sound
   const initAudio = () => {
     if (audioCtxRef.current) return;
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       const ctx = new AudioCtx();
-      
-      const drone = ctx.createOscillator();
+
+      // === Ceremonial Shankh Bell Sound ===
+      // Layer 1: Warm fundamental bell tone (root note A2 110Hz)
+      const bell1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      bell1.type = 'sine';
+      bell1.frequency.setValueAtTime(110, ctx.currentTime);
+      gain1.gain.setValueAtTime(0, ctx.currentTime);
+
+      // Layer 2: Harmonic overtone — pure fifth (E3 164Hz) adds richness
+      const bell2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      bell2.type = 'sine';
+      bell2.frequency.setValueAtTime(164.81, ctx.currentTime);
+      gain2.gain.setValueAtTime(0, ctx.currentTime);
+
+      // Layer 3: Warm octave drone (A3 220Hz) for depth
+      const bell3 = ctx.createOscillator();
+      const gain3 = ctx.createGain();
+      bell3.type = 'triangle';
+      bell3.frequency.setValueAtTime(220, ctx.currentTime);
+      gain3.gain.setValueAtTime(0, ctx.currentTime);
+
+      // Lowpass filter for warm, round bell timbre (not harsh)
       const filter = ctx.createBiquadFilter();
-      const gain = ctx.createGain();
-
-      drone.type = 'sawtooth';
-      drone.frequency.setValueAtTime(55, ctx.currentTime); // Low A
-
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(200, ctx.currentTime);
-      filter.Q.setValueAtTime(4, ctx.currentTime);
+      filter.frequency.setValueAtTime(1800, ctx.currentTime);
+      filter.Q.setValueAtTime(0.8, ctx.currentTime);
 
-      gain.gain.setValueAtTime(0, ctx.currentTime);
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0, ctx.currentTime);
 
-      drone.connect(filter);
-      filter.connect(gain);
-      gain.connect(ctx.destination);
+      // Connect signal chain
+      bell1.connect(gain1); gain1.connect(filter);
+      bell2.connect(gain2); gain2.connect(filter);
+      bell3.connect(gain3); gain3.connect(filter);
+      filter.connect(masterGain);
+      masterGain.connect(ctx.destination);
 
-      drone.start();
+      bell1.start(); bell2.start(); bell3.start();
 
-      synthRef.current = { drone, gain, filter };
+      // Keep the master reference for toggling
+      synthRef.current = { drone: bell1, gain: masterGain, filter };
+      // Expose the partial gains for balanced volume
+      (synthRef.current as any)._g1 = gain1;
+      (synthRef.current as any)._g2 = gain2;
+      (synthRef.current as any)._g3 = gain3;
       audioCtxRef.current = ctx;
     } catch (e) {
       console.warn('Web Audio API not supported:', e);
@@ -126,20 +152,36 @@ export const StoryLandingOverlay: React.FC<StoryLandingOverlayProps> = ({ onComp
       audioCtxRef.current.resume();
     }
     if (synthRef.current) {
-      const g = synthRef.current.gain;
-      const targetGain = isPlayingSound ? 0 : 0.08;
-      g.gain.linearRampToValueAtTime(targetGain, audioCtxRef.current!.currentTime + 1);
+      const masterGain = synthRef.current.gain;
+      const ctx = audioCtxRef.current!;
+      const now = ctx.currentTime;
+      // Individually fade the three bell layers to balanced volumes
+      const g1 = (synthRef.current as any)._g1 as GainNode | undefined;
+      const g2 = (synthRef.current as any)._g2 as GainNode | undefined;
+      const g3 = (synthRef.current as any)._g3 as GainNode | undefined;
+
+      if (isPlayingSound) {
+        // Fade out gracefully
+        masterGain.gain.linearRampToValueAtTime(0, now + 1.5);
+      } else {
+        // Fade in with balanced bell layers
+        masterGain.gain.setValueAtTime(0, now);
+        masterGain.gain.linearRampToValueAtTime(1.0, now + 1.5);
+        if (g1) { g1.gain.setValueAtTime(0, now); g1.gain.linearRampToValueAtTime(0.06, now + 1.5); }
+        if (g2) { g2.gain.setValueAtTime(0, now); g2.gain.linearRampToValueAtTime(0.04, now + 1.5); }
+        if (g3) { g3.gain.setValueAtTime(0, now); g3.gain.linearRampToValueAtTime(0.035, now + 1.5); }
+      }
       setIsPlayingSound(!isPlayingSound);
     }
   };
 
-  // Sound transition cue when chapter changes
+  // Sound transition cue when chapter changes — ascending pentatonic chime
   const playChapterCue = (chapterIdx: number) => {
     if (!audioCtxRef.current || audioCtxRef.current.state === 'suspended' || !isPlayingSound) return;
     const ctx = audioCtxRef.current;
     
-    // Play a lovely high-pitched pentatonic chime
-    const frequencies = [220.0, 277.18, 329.63, 440.0, 554.37]; // A major pentatonic
+    // Royal ascending bell tones (Sa Re Ga Ma Pa — Raga Bhairav feel)
+    const frequencies = [261.63, 293.66, 329.63, 392.0, 440.0]; // C D E G A
     const freq = frequencies[chapterIdx % frequencies.length];
 
     const osc = ctx.createOscillator();
@@ -147,21 +189,21 @@ export const StoryLandingOverlay: React.FC<StoryLandingOverlayProps> = ({ onComp
     
     osc.type = 'sine';
     osc.frequency.setValueAtTime(freq, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(freq * 2, ctx.currentTime + 1.2);
 
-    gain.gain.setValueAtTime(0.04, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5);
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.0);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
 
     osc.start();
-    osc.stop(ctx.currentTime + 1.6);
+    osc.stop(ctx.currentTime + 2.1);
 
-    // Shift ambient low drone filter frequency dynamically
+    // Modulate filter cutoff beautifully on chapter transition (higher brightness per chapter)
     if (synthRef.current) {
-      const targetCutoff = 150 + chapterIdx * 100;
-      synthRef.current.filter.frequency.setTargetAtTime(targetCutoff, ctx.currentTime, 0.8);
+      const targetCutoff = 800 + chapterIdx * 250;
+      synthRef.current.filter.frequency.setTargetAtTime(targetCutoff, ctx.currentTime, 1.2);
     }
   };
 

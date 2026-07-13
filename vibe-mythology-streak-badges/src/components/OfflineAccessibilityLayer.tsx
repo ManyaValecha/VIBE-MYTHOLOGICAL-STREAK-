@@ -20,12 +20,12 @@ interface OfflineAccessibilityLayerProps {
   courses: any[];
 }
 
-// Custom hook to handle Web Audio API synthesized forest soundscape and sound effects
+// Custom hook to handle Web Audio API synthesized bird song soundscape and sound effects
 const useForestSounds = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const cricketIntervalRef = useRef<any>(null);
-  const windNodeRef = useRef<BiquadFilterNode | null>(null);
+  const droneOscillatorsRef = useRef<any[]>([]);
+  const masterGainRef = useRef<GainNode | null>(null);
 
   const initAudio = () => {
     if (!audioCtxRef.current) {
@@ -42,77 +42,86 @@ const useForestSounds = () => {
       ctx.resume();
     }
 
-    // Synthesize ambient wind (white noise bandpass sweep)
-    const bufferSize = 2 * ctx.sampleRate;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = Math.random() * 2 - 1;
-    }
+    if (masterGainRef.current) return; // Already playing
 
-    const whiteNoise = ctx.createBufferSource();
-    whiteNoise.buffer = noiseBuffer;
-    whiteNoise.loop = true;
+    // Master Gain (very gentle and soothing)
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(0, ctx.currentTime);
+    masterGainRef.current = masterGain;
 
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.Q.value = 10;
-    filter.frequency.value = 350;
+    // Gentle lowpass filter for warmth
+    const filterNode = ctx.createBiquadFilter();
+    filterNode.type = 'lowpass';
+    filterNode.frequency.setValueAtTime(400, ctx.currentTime);
+    filterNode.Q.setValueAtTime(0.5, ctx.currentTime);
 
-    const gain = ctx.createGain();
-    gain.gain.value = 0.04; // Gentle wind volume
+    filterNode.connect(masterGain);
+    masterGain.connect(ctx.destination);
 
-    whiteNoise.connect(filter);
-    filter.connect(gain);
-    gain.connect(ctx.destination);
-    whiteNoise.start();
+    const baseFreq = 108; // Deep meditative root
+    
+    const createSoothingOscillator = (freq: number, detune: number, volume: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      osc.detune.value = detune;
 
-    windNodeRef.current = filter;
+      gain.gain.value = volume;
+      
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.05 + (Math.random() * 0.03); // Very slow breath
+      lfoGain.gain.value = volume * 0.4;
+      lfo.connect(lfoGain);
+      lfoGain.connect(gain.gain);
+      lfo.start();
 
-    // Periodically modulate wind frequency to simulate gusts
-    const windModulation = setInterval(() => {
-      if (filter && ctx.state === 'running') {
-        const baseFreq = 300 + Math.random() * 200;
-        filter.frequency.exponentialRampToValueAtTime(baseFreq, ctx.currentTime + 3);
-      }
-    }, 4000);
+      osc.connect(gain);
+      gain.connect(filterNode);
 
-    // Synthesize cricket chirps
-    cricketIntervalRef.current = setInterval(() => {
-      if (ctx.state !== 'running') return;
-      // Emit a burst of chirps
-      const now = ctx.currentTime;
-      for (let i = 0; i < 4; i++) {
-        const startTime = now + i * 0.18;
-        const osc = ctx.createOscillator();
-        const chirpGain = ctx.createGain();
+      osc.start();
+      return { osc, lfo };
+    };
 
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(4500 + Math.random() * 200, startTime);
-        osc.frequency.exponentialRampToValueAtTime(100, startTime + 0.08);
+    const root1 = createSoothingOscillator(baseFreq, -3, 0.2);
+    const root2 = createSoothingOscillator(baseFreq, 3, 0.2);
+    const fifth = createSoothingOscillator(baseFreq * 1.5, 0, 0.1);
+    const octave = createSoothingOscillator(baseFreq * 2, 2, 0.05);
 
-        chirpGain.gain.setValueAtTime(0, startTime);
-        chirpGain.gain.linearRampToValueAtTime(0.015, startTime + 0.01);
-        chirpGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.07);
+    droneOscillatorsRef.current = [root1.osc, root1.lfo, root2.osc, root2.lfo, fifth.osc, fifth.lfo, octave.osc, octave.lfo];
 
-        osc.connect(chirpGain);
-        chirpGain.connect(ctx.destination);
-
-        osc.start(startTime);
-        osc.stop(startTime + 0.08);
-      }
-    }, 2400);
-
+    // Fade-in gracefully
+    masterGain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 8.0);
     setIsPlaying(true);
   };
 
   const stopSoundscape = () => {
-    if (audioCtxRef.current) {
-      audioCtxRef.current.suspend();
+    const ctx = audioCtxRef.current;
+    const gain = masterGainRef.current;
+
+    if (ctx && gain && ctx.state === 'running') {
+      gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 3.0);
+
+      setTimeout(() => {
+        droneOscillatorsRef.current.forEach(osc => {
+          try { osc.stop(); } catch (e) {}
+        });
+        droneOscillatorsRef.current = [];
+        try { gain.disconnect(); } catch (e) {}
+        masterGainRef.current = null;
+      }, 3200);
+    } else {
+      droneOscillatorsRef.current.forEach(osc => {
+        try { osc.stop(); } catch (e) {}
+      });
+      droneOscillatorsRef.current = [];
+      masterGainRef.current = null;
     }
-    if (cricketIntervalRef.current) {
-      clearInterval(cricketIntervalRef.current);
-    }
+    
     setIsPlaying(false);
   };
 
@@ -409,56 +418,107 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
     }
   };
 
-  // Simulate loading TensorFlow.js + MobileBERT model locally in browser
-  const handleQueryLocalBot = () => {
+  // Chat handler — routes to real Gemini API (online) or local fallback (offline)
+  const handleQueryLocalBot = async () => {
     if (!botQuery.trim()) return;
 
     const userText = botQuery;
     setBotChatLogs(prev => [...prev, { sender: 'user', text: userText }]);
     setBotQuery('');
 
-    if (tfjsStatus === 'idle') {
+    if (!isSimulatedOffline) {
+      // ===== ONLINE MODE: Call real Gemini API =====
       setTfjsStatus('loading');
-      setTfjsProgress(10);
-      
-      const interval = setInterval(() => {
-        setTfjsProgress(prev => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            setTfjsStatus('ready');
-            triggerBotResponse(userText);
-            return 100;
-          }
-          return prev + 15;
+      setTfjsProgress(50);
+      try {
+        // Build conversation history for context
+        const conversationHistory = botChatLogs.slice(-8).map(log => ({
+          role: log.sender === 'user' ? 'user' : 'model',
+          text: log.text
+        }));
+
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: userText, conversationHistory })
         });
-      }, 300);
+
+        setTfjsProgress(100);
+        setTfjsStatus('ready');
+
+        if (response.ok) {
+          const data = await response.json();
+          setBotChatLogs(prev => [...prev, { sender: 'betaal', text: data.reply }]);
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          setBotChatLogs(prev => [...prev, {
+            sender: 'betaal',
+            text: errData.fallback || 'The celestial connection faltered! Betaal could not reach the wisdom servers. Please try again.'
+          }]);
+        }
+      } catch (err) {
+        setTfjsStatus('ready');
+        setBotChatLogs(prev => [...prev, {
+          sender: 'betaal',
+          text: 'Network error! Betaal retreats into the storm. Check your connection and try again, brave Vikram.'
+        }]);
+      }
     } else {
-      triggerBotResponse(userText);
+      // ===== OFFLINE MODE: Local keyword-matching + store in localStorage =====
+      setTfjsStatus('ready');
+      const reply = getOfflineBotReply(userText);
+      setBotChatLogs(prev => {
+        const updated = [...prev, { sender: 'betaal' as const, text: reply }];
+        // Persist offline conversations to localStorage
+        try {
+          const stored = JSON.parse(localStorage.getItem('vibe_offline_chat_logs') || '[]');
+          stored.push({ query: userText, reply, timestamp: new Date().toISOString() });
+          localStorage.setItem('vibe_offline_chat_logs', JSON.stringify(stored));
+        } catch (e) { /* ignore storage errors */ }
+        return updated;
+      });
+      playGhostGiggle();
     }
   };
 
-  const triggerBotResponse = (query: string) => {
-    setTimeout(() => {
-      const q = query.toLowerCase();
-      let reply = "Your technical query echoes in the silence of the forest, Vikram. Let us ponder: as MobileBERT parses this content, remember that local on-device models do not rely on server calls, granting complete privacy and speed!";
+  // Offline fallback — comprehensive local knowledge base
+  const getOfflineBotReply = (query: string): string => {
+    const q = query.toLowerCase();
 
-      if (q.includes('service') || q.includes('sw') || q.includes('cache')) {
-        reply = "Betaal sits closer to you: 'A Service Worker is indeed like the loyal spirits that protect Ujjain's borders. It intercepts every request. If the internet drops, it serves from its secret vault (Cache Storage), preserving the continuity of your quest!'";
-      } else if (q.includes('pouch') || q.includes('couch') || q.includes('sync')) {
-        reply = "Betaal cackles: 'PouchDB and CouchDB act like the magical mirror of King Vikram! Whatever is carved in the on-device PouchDB stone is instantly reflected on the central server (CouchDB) when the divine connection is restored!'";
-      } else if (q.includes('indexed') || q.includes('idb') || q.includes('db')) {
-        reply = "Betaal whispers: 'LocalStorage is small and rigid, but IndexedDB is a vast cavern where entire ledgers of transactions and historical dates can be stored asynchronously without freezing the King's chariot!'";
-      } else if (q.includes('streak') || q.includes('time')) {
-        reply = "Betaal mocks lovingly: 'Ah! You worry about your daily learning streak! With our offline accessibility layer, as soon as you finish flashcards offline, IndexedDB seals the timestamp. You will never decay!'";
-      }
+    if (q.includes('service worker') || q.includes('sw')) {
+      return "🔒 [Offline] A Service Worker is a script that runs in the background, intercepting network requests. It acts as a proxy between browser and network — serving cached resources when offline, enabling push notifications, and providing background sync. Register it with `navigator.serviceWorker.register('/sw.js')`.";
+    } else if (q.includes('pouch') || q.includes('couch') || q.includes('sync')) {
+      return "🔄 [Offline] PouchDB runs in browser storage (IndexedDB) and replicates bidirectionally to remote CouchDB when online. Use `new PouchDB('mydb')` locally, then `db.sync('http://remote:5984/mydb')` for seamless offline-first data synchronization.";
+    } else if (q.includes('indexed') || q.includes('idb')) {
+      return "💾 [Offline] IndexedDB is an async, transactional browser database for storing structured data, blobs, and files. Unlike localStorage (5MB, sync), IndexedDB handles GBs asynchronously without blocking the main thread. Use `indexedDB.open('db', 1)` to get started.";
+    } else if (q.includes('react') || q.includes('hook') || q.includes('component')) {
+      return "⚛️ [Offline] React components are reusable UI building blocks. Hooks like `useState` manage local state, `useEffect` handles side effects, `useMemo`/`useCallback` optimize performance, and `useRef` accesses DOM elements. Zustand is recommended for global state in the ViBe curriculum.";
+    } else if (q.includes('typescript') || q.includes('type') || q.includes('interface')) {
+      return "📘 [Offline] TypeScript adds static typing to JavaScript. Key concepts: `interface` for object shapes, `type` aliases for unions/intersections, `generics` for reusable typed functions like `function identity<T>(arg: T): T { return arg; }`, and `decorators` for meta-programming.";
+    } else if (q.includes('express') || q.includes('middleware') || q.includes('api') || q.includes('rest')) {
+      return "🚀 [Offline] Express.js is a Node.js framework for building REST APIs. Middleware functions process requests in a pipeline: `app.use((req, res, next) => { /* logic */ next(); })`. Use the MVC pattern to separate routes, controllers, and models for scalability.";
+    } else if (q.includes('mongo') || q.includes('database') || q.includes('crud') || q.includes('schema')) {
+      return "🗃️ [Offline] MongoDB is a document database storing JSON-like documents. CRUD: `db.collection.insertOne()`, `find()`, `updateOne()`, `deleteOne()`. The Aggregation Framework (`$match`, `$group`, `$project`) enables complex data transformations in pipelines.";
+    } else if (q.includes('git') || q.includes('github') || q.includes('branch') || q.includes('commit')) {
+      return "🔀 [Offline] Git is a distributed version control system. Key commands: `git add .`, `git commit -m 'msg'`, `git push origin main`, `git branch feature-x`, `git merge`. GitHub adds remote collaboration with pull requests, code reviews, and CI/CD integrations.";
+    } else if (q.includes('streak') || q.includes('habit') || q.includes('daily')) {
+      return "🔥 [Offline] Your streak tracks consecutive days of learning activity. Any valid action (flashcard, quiz, video, lesson) counts. The ViBe PWA stores your activity timestamp in IndexedDB even offline — your streak is protected as long as you engage daily!";
+    } else if (q.includes('cache') || q.includes('offline') || q.includes('pwa')) {
+      return "📱 [Offline] A Progressive Web App (PWA) uses Service Workers + Cache API for offline access. The cache-first strategy serves stored resources instantly. Use `caches.open('v1')` and `cache.put(request, response)` to manually control what's available offline.";
+    }
 
-      setBotChatLogs(prev => [...prev, { sender: 'betaal', text: reply }]);
-      playGhostGiggle();
-    }, 800);
+    return `📖 [Offline] I'm running locally without server access. I can answer questions about: Service Workers, PouchDB/CouchDB sync, IndexedDB, React hooks, TypeScript types, Express middleware, MongoDB CRUD, Git commands, PWA caching, and streak mechanics. Try asking about one of these topics!`;
   };
 
   return (
-    <div id="offline-accessibility-layer-root" className="w-full bg-slate-950/85 border border-emerald-500/25 rounded-2xl p-6 relative overflow-hidden backdrop-blur-md shadow-[0_0_40px_rgba(16,185,129,0.05)] mt-6">
+    <div
+      id="offline-accessibility-layer-root"
+      className={`w-full rounded-2xl p-6 relative overflow-hidden backdrop-blur-md mt-6 transition-all duration-700 ${
+        isSimulatedOffline
+          ? 'bg-amber-950/10 border border-amber-500/25 shadow-[0_0_40px_rgba(245,158,11,0.08)]'
+          : 'bg-slate-950/85 border border-emerald-500/25 shadow-[0_0_40px_rgba(16,185,129,0.05)]'
+      }`}
+    >
       
       {/* Stars Backdrop Atmosphere */}
       <div className="absolute inset-0 pointer-events-none opacity-20 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/40 via-slate-950 to-slate-950" />
@@ -507,20 +567,26 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-900 pb-5 mb-6">
         <div>
           <div className="flex items-center gap-2.5">
-            <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[9px] font-mono font-bold uppercase rounded tracking-wider">
-              Offline Accessibility Layer
+            <span className={`px-2 py-0.5 border text-[9px] font-mono font-bold uppercase rounded tracking-wider transition-all duration-500 ${
+              isSimulatedOffline
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+            }`}>
+              {isSimulatedOffline ? '📴 Offline Sanctuary' : '🌐 Online Mode'}
             </span>
             <span className="text-slate-600">|</span>
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] text-slate-400 font-mono">PWA Cache Ready</span>
+              <span className={`w-2 h-2 rounded-full ${isSimulatedOffline ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400 animate-pulse'}`} />
+              <span className="text-[10px] text-slate-400 font-mono">{isSimulatedOffline ? 'Cache Serving' : 'PWA Cache Ready'}</span>
             </div>
           </div>
           <h2 className="text-sm font-serif font-bold text-slate-100 tracking-wider uppercase mt-1 flex items-center gap-2">
-            🌳 Starry Forest PWA Sanctuary
+            {isSimulatedOffline ? '🔒 Offline-First PWA Sanctuary' : '🌳 Starry Forest PWA Sanctuary'}
           </h2>
           <p className="text-xs text-slate-400 font-mono mt-0.5">
-            Spend 5 minutes offline solving the concept flashcards or querying Betaal to maintain your streak without any internet connection.
+            {isSimulatedOffline
+              ? 'You are in isolation mode. Complete flashcards or query Betaal AI below — activities queue locally and sync when you reconnect.'
+              : 'Spend 5 minutes offline solving the concept flashcards or querying Betaal to maintain your streak without any internet connection.'}
           </p>
 
           {/* Real pre-caching feature for Vibe github repository */}
@@ -566,35 +632,65 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
 
         {/* Online / Offline simulated toggle switch */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-slate-900/80 border border-slate-800 p-1.5 rounded-xl flex items-center gap-1">
+          {/* Dramatic Online/Offline toggle with clear visual difference */}
+          <div className={`flex items-center gap-1 p-1 rounded-xl border transition-all duration-500 ${
+            isSimulatedOffline
+              ? 'bg-amber-950/40 border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.15)]'
+              : 'bg-emerald-950/40 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
+          }`}>
             <button
               onClick={() => {
                 setIsSimulatedOffline(false);
                 playChime();
               }}
-              className={`px-3 py-1 rounded-lg text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all ${
-                !isSimulatedOffline 
-                  ? 'bg-indigo-600 text-white shadow-md' 
-                  : 'text-slate-400 hover:text-slate-200'
+              className={`relative px-4 py-2 rounded-lg text-[11px] font-mono font-bold flex items-center gap-2 transition-all duration-300 ${
+                !isSimulatedOffline
+                  ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)] scale-105'
+                  : 'text-slate-500 hover:text-slate-300 scale-100'
               }`}
             >
               <Wifi className="w-3.5 h-3.5" />
               <span>ONLINE</span>
+              {!isSimulatedOffline && (
+                <span className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-slate-950 animate-pulse" />
+              )}
             </button>
             <button
               onClick={() => {
                 setIsSimulatedOffline(true);
                 playGhostGiggle();
               }}
-              className={`px-3 py-1 rounded-lg text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all ${
-                isSimulatedOffline 
-                  ? 'bg-amber-600 text-white shadow-md' 
-                  : 'text-slate-400 hover:text-slate-200'
+              className={`relative px-4 py-2 rounded-lg text-[11px] font-mono font-bold flex items-center gap-2 transition-all duration-300 ${
+                isSimulatedOffline
+                  ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(245,158,11,0.4)] scale-105'
+                  : 'text-slate-500 hover:text-slate-300 scale-100'
               }`}
             >
               <WifiOff className="w-3.5 h-3.5" />
               <span>OFFLINE</span>
+              {isSimulatedOffline && (
+                <span className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-amber-400 border-2 border-slate-950 animate-bounce" />
+              )}
             </button>
+          </div>
+
+          {/* Current mode banner — big visible state label */}
+          <div className={`hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-mono font-bold transition-all duration-500 ${
+            isSimulatedOffline
+              ? 'bg-amber-950/30 border-amber-500/30 text-amber-400'
+              : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-400'
+          }`}>
+            {isSimulatedOffline ? (
+              <>
+                <WifiOff className="w-3.5 h-3.5 animate-pulse" />
+                <span>ISOLATION MODE — Activities queue locally</span>
+              </>
+            ) : (
+              <>
+                <Wifi className="w-3.5 h-3.5" />
+                <span>CONNECTED — Changes sync in real-time</span>
+              </>
+            )}
           </div>
 
           <button
@@ -623,6 +719,24 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
             <span>FORCE BUST CACHE & UPDATE</span>
           </button>
         </div>
+      </div>
+
+      {/* === DRAMATIC MODE INDICATOR STRIP === */}
+      <div className={`-mx-6 px-6 py-2.5 mb-5 flex items-center gap-3 transition-all duration-700 ${
+        isSimulatedOffline
+          ? 'bg-gradient-to-r from-amber-950/60 via-amber-900/20 to-transparent border-y border-amber-500/20'
+          : 'bg-gradient-to-r from-emerald-950/60 via-emerald-900/20 to-transparent border-y border-emerald-500/20'
+      }`}>
+        <div className={`flex-shrink-0 w-2.5 h-2.5 rounded-full ${
+          isSimulatedOffline ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'
+        }`} />
+        <p className={`text-[10px] font-mono font-bold tracking-wide ${
+          isSimulatedOffline ? 'text-amber-300' : 'text-emerald-300'
+        }`}>
+          {isSimulatedOffline
+            ? '📴 OFFLINE SANCTUARY ACTIVE — Your session is air-gapped. Activities are stored in PouchDB/IndexedDB and will sync when you reconnect.'
+            : '🌐 LIVE CONNECTION — All activities sync immediately to the ViBe platform. Streak progress updates in real-time.'}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -780,25 +894,39 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
           </div>
         </div>
 
-        {/* COLUMN 3: TensorFlow.js Local chatbot running MobileBERT (4 Cols) */}
+        {/* COLUMN 3: ViBe AI Chatbot — Gemini online, local offline */}
         <div className="lg:col-span-4 flex flex-col gap-4">
-          <div className="bg-slate-900/60 border border-slate-900/80 rounded-xl p-4 flex-1 flex flex-col justify-between">
+          <div className={`bg-slate-900/60 border rounded-xl p-4 flex-1 flex flex-col justify-between transition-all duration-500 ${
+            isSimulatedOffline ? 'border-amber-500/20' : 'border-emerald-500/20'
+          }`}>
             <div>
               <h3 className="text-xs font-bold text-slate-200 font-mono tracking-widest uppercase mb-1.5 flex items-center gap-1.5 border-b border-slate-950 pb-1.5">
-                🤖 On-Device Local AI (MobileBERT)
+                {isSimulatedOffline
+                  ? '📴 Betaal AI (Offline Local Knowledge)'
+                  : '🤖 Betaal AI (Gemini-Powered — Live)'}
               </h3>
+              <div className={`text-[9px] font-mono mb-2 flex items-center gap-1 ${
+                isSimulatedOffline ? 'text-amber-400' : 'text-emerald-400'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isSimulatedOffline ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
+                {isSimulatedOffline
+                  ? 'Offline — Using local knowledge base. Conversations stored in localStorage.'
+                  : 'Online — Connected to Gemini AI. Real-time accurate answers.'}
+              </div>
 
               {/* Chat log box */}
-              <div className="mt-3 bg-slate-950/60 border border-slate-900 rounded-xl p-3 h-[140px] overflow-y-auto space-y-2.5 scrollbar-thin scrollbar-thumb-slate-900 scrollbar-track-transparent">
+              <div className="mt-1 bg-slate-950/60 border border-slate-900 rounded-xl p-3 h-[160px] overflow-y-auto space-y-2.5 scrollbar-thin scrollbar-thumb-slate-900 scrollbar-track-transparent">
                 {botChatLogs.map((log, index) => (
                   <div key={index} className={`flex flex-col ${log.sender === 'user' ? 'items-end' : 'items-start'}`}>
                     <span className="text-[8px] font-mono text-slate-600 uppercase mb-0.5">
-                      {log.sender === 'user' ? 'Vikram' : 'Betaal'}
+                      {log.sender === 'user' ? 'You' : 'Betaal AI'}
                     </span>
-                    <div className={`text-[10px] px-2.5 py-1.5 rounded-xl max-w-[90%] leading-relaxed ${
+                    <div className={`text-[10px] px-2.5 py-1.5 rounded-xl max-w-[90%] leading-relaxed whitespace-pre-wrap ${
                       log.sender === 'user' 
                         ? 'bg-indigo-600/20 border border-indigo-500/20 text-indigo-300' 
-                        : 'bg-slate-900 border border-slate-850 text-slate-300'
+                        : isSimulatedOffline
+                          ? 'bg-amber-950/30 border border-amber-500/15 text-slate-300'
+                          : 'bg-emerald-950/20 border border-emerald-500/15 text-slate-300'
                     }`}>
                       {log.text}
                     </div>
@@ -806,23 +934,25 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
                 ))}
               </div>
 
-              {/* TFJS Loader status info bar */}
+              {/* Loading indicator */}
               {tfjsStatus === 'loading' && (
                 <div className="mt-2 bg-slate-950 border border-slate-900 rounded-lg p-2">
                   <div className="flex justify-between text-[9px] font-mono text-slate-500 mb-1">
-                    <span>Loading tfjs-core & mobilebert...</span>
+                    <span>{isSimulatedOffline ? 'Processing locally...' : 'Querying Gemini AI...'}</span>
                     <span>{tfjsProgress}%</span>
                   </div>
                   <div className="w-full bg-slate-900 h-1 rounded-full overflow-hidden">
-                    <div className="bg-indigo-500 h-full transition-all duration-300" style={{ width: `${tfjsProgress}%` }} />
+                    <div className={`h-full transition-all duration-300 ${isSimulatedOffline ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${tfjsProgress}%` }} />
                   </div>
                 </div>
               )}
 
               {tfjsStatus === 'ready' && (
-                <div className="mt-2 text-[9px] font-mono text-emerald-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>TensorFlow.js engine compiled & active locally in memory!</span>
+                <div className={`mt-2 text-[9px] font-mono flex items-center gap-1 ${
+                  isSimulatedOffline ? 'text-amber-400' : 'text-emerald-400'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isSimulatedOffline ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                  <span>{isSimulatedOffline ? 'Local knowledge base active — answers cached in localStorage' : 'Gemini AI connected — getting real-time answers'}</span>
                 </div>
               )}
             </div>
