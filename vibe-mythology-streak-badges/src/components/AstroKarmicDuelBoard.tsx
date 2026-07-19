@@ -19,17 +19,64 @@ export function AstroKarmicDuelBoard({
 }: AstroKarmicDuelBoardProps) {
   // Query Parameters State for Active Duel
   const [hasActiveDuel, setHasActiveDuel] = useState(false);
-  const [challengerName, setChallengerName] = useState('Acharya Dev');
-  const [challengerStreak, setChallengerStreak] = useState(15);
-  const [challengerKarma, setChallengerKarma] = useState(350);
+  const [challengerName, setChallengerName] = useState('');
+  const [challengerStreak, setChallengerStreak] = useState(0);
+  const [challengerKarma, setChallengerKarma] = useState(0);
   const [challengerAvatar, setChallengerAvatar] = useState('🔮');
 
   // Peer Challenge Scroll Creator State
   const [showForger, setShowForger] = useState(false);
-  const [myAlias, setMyAlias] = useState('Sage Seeker');
-  const [myAvatar, setMyAvatar] = useState('👑');
+  const [myAlias, setMyAlias] = useState(() => {
+    // Pre-fill from current user profile stored in localStorage
+    const currentUser = localStorage.getItem('vibe_current_profile') || '';
+    return currentUser;
+  });
+  const [myAvatar, setMyAvatar] = useState(state.avatar || '👑');
   const [copiedLink, setCopiedLink] = useState('');
   const [isCopied, setIsCopied] = useState(false);
+
+  // Live peers from the app's registered local profiles
+  const [localPeers, setLocalPeers] = useState<{ name: string; streak: number; karma: number; avatar: string }[]>([]);
+
+  // Load peers from local storage and leaderboard API on mount
+  useEffect(() => {
+    const currentUser = localStorage.getItem('vibe_current_profile') || '';
+    const peers: { name: string; streak: number; karma: number; avatar: string }[] = [];
+    try {
+      const stored = localStorage.getItem('vibe_profiles');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        for (const [name, pState] of Object.entries<any>(parsed)) {
+          if (name.toLowerCase() !== currentUser.toLowerCase()) {
+            peers.push({
+              name,
+              streak: Math.max(pState.currentStreak || 0, pState.longestStreak || 0),
+              karma: pState.karmaPoints || 0,
+              avatar: pState.avatar || '🎓'
+            });
+          }
+        }
+      }
+    } catch (e) {}
+
+    // Also fetch from global leaderboard API
+    fetch('/api/leaderboard')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: any[]) => {
+        if (Array.isArray(data)) {
+          const apiPeers = data
+            .filter(p => p.name?.toLowerCase() !== currentUser.toLowerCase())
+            .map(p => ({ name: p.name, streak: p.streak || 0, karma: p.karma || 0, avatar: p.avatarSeed || '🎓' }));
+          // Merge, local profiles take priority
+          const localNames = peers.map(p => p.name.toLowerCase());
+          const merged = [...peers, ...apiPeers.filter(p => !localNames.includes(p.name.toLowerCase()))];
+          setLocalPeers(merged);
+        } else {
+          setLocalPeers(peers);
+        }
+      })
+      .catch(() => setLocalPeers(peers));
+  }, []);
 
   // Parse URL Query Params on mount
   useEffect(() => {
@@ -215,11 +262,11 @@ export function AstroKarmicDuelBoard({
                 </div>
                 <div className="flex items-center gap-4 mb-4">
                   <div className="text-4xl p-3 bg-slate-900 border border-slate-800 rounded-2xl">
-                    👑
+                    {state.avatar || '👑'}
                   </div>
                   <div>
                     <h3 className="text-base font-cinzel-deco font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">
-                      vibeseeker
+                      {localStorage.getItem('vibe_current_profile') || 'Seeker'}
                     </h3>
                     <p className="text-xs text-indigo-400 font-space font-bold">
                       🔮 Discipline Guardian
@@ -341,6 +388,37 @@ export function AstroKarmicDuelBoard({
                 <Star className="w-3.5 h-3.5" />
                 Configure Thy Challenger Scroll
               </h4>
+
+              {/* Quick Peer Challenge: Registered Students */}
+              {localPeers.length > 0 && (
+                <div className="mb-5">
+                  <p className="text-[10px] font-mono uppercase tracking-widest text-indigo-400 font-bold mb-2 flex items-center gap-1.5">
+                    <UserPlus className="w-3 h-3" /> Registered Peers on This Device
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {localPeers.slice(0, 8).map(peer => (
+                      <button
+                        key={peer.name}
+                        type="button"
+                        onClick={() => {
+                          const baseUrl = window.location.origin + window.location.pathname;
+                          const shareUrl = `${baseUrl}?challenge=true&challenger=${encodeURIComponent(myAlias || peer.name)}&streak=${state.currentStreak}&karma=${state.karmaPoints}&avatar=${encodeURIComponent(myAvatar)}`;
+                          setCopiedLink(shareUrl);
+                          navigator.clipboard.writeText(shareUrl).catch(() => {});
+                          setIsCopied(true);
+                          triggerNotification(`📜 Challenge scroll forged for ${peer.name}! Share the link.`, 'success');
+                          setTimeout(() => setIsCopied(false), 3000);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-amber-500/20 hover:border-amber-400/40 rounded-xl text-xs font-mono text-slate-300 hover:text-amber-300 transition-all"
+                      >
+                        <span className="text-base">{peer.avatar}</span>
+                        <span>{peer.name}</span>
+                        <span className="text-amber-500 font-bold text-[9px]">🔥{peer.streak}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <form onSubmit={handleForgeLink} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

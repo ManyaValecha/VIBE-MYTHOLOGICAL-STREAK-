@@ -24,8 +24,8 @@ interface OfflineAccessibilityLayerProps {
 const useForestSounds = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const droneOscillatorsRef = useRef<any[]>([]);
   const masterGainRef = useRef<GainNode | null>(null);
+  const melodyTimeoutRef = useRef<any>(null);
 
   const initAudio = () => {
     if (!audioCtxRef.current) {
@@ -44,88 +44,62 @@ const useForestSounds = () => {
 
     if (masterGainRef.current) return; // Already playing
 
-    // Master Gain (very gentle and soothing)
     const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0, ctx.currentTime);
+    masterGain.gain.setValueAtTime(0.08, ctx.currentTime);
+    masterGain.connect(ctx.destination);
     masterGainRef.current = masterGain;
 
-    // Gentle lowpass filter for warmth
-    const filterNode = ctx.createBiquadFilter();
-    filterNode.type = 'lowpass';
-    filterNode.frequency.setValueAtTime(400, ctx.currentTime);
-    filterNode.Q.setValueAtTime(0.5, ctx.currentTime);
+    const scale = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50];
 
-    filterNode.connect(masterGain);
-    masterGain.connect(ctx.destination);
+    const playNextNote = () => {
+      const currentCtx = audioCtxRef.current;
+      const currentGain = masterGainRef.current;
+      if (!currentCtx || !currentGain || currentCtx.state === 'suspended') return;
 
-    const baseFreq = 108; // Deep meditative root
-    
-    const createSoothingOscillator = (freq: number, detune: number, volume: number) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      osc.detune.value = detune;
+      const now = currentCtx.currentTime;
+      const freq = scale[Math.floor(Math.random() * scale.length)];
 
-      gain.gain.value = volume;
-      
-      const lfo = ctx.createOscillator();
-      const lfoGain = ctx.createGain();
-      lfo.type = 'sine';
-      lfo.frequency.value = 0.05 + (Math.random() * 0.03); // Very slow breath
-      lfoGain.gain.value = volume * 0.4;
-      lfo.connect(lfoGain);
-      lfoGain.connect(gain.gain);
-      lfo.start();
+      const osc = currentCtx.createOscillator();
+      const noteGain = currentCtx.createGain();
 
-      osc.connect(gain);
-      gain.connect(filterNode);
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now);
 
-      osc.start();
-      return { osc, lfo };
+      noteGain.gain.setValueAtTime(0, now);
+      noteGain.gain.linearRampToValueAtTime(0.05, now + 0.05);
+      noteGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.5);
+
+      osc.connect(noteGain);
+      noteGain.connect(currentGain);
+
+      osc.start(now);
+      osc.stop(now + 2.6);
+
+      const nextTime = 2000 + Math.random() * 2000;
+      melodyTimeoutRef.current = setTimeout(playNextNote, nextTime);
     };
 
-    const root1 = createSoothingOscillator(baseFreq, -3, 0.2);
-    const root2 = createSoothingOscillator(baseFreq, 3, 0.2);
-    const fifth = createSoothingOscillator(baseFreq * 1.5, 0, 0.1);
-    const octave = createSoothingOscillator(baseFreq * 2, 2, 0.05);
-
-    droneOscillatorsRef.current = [root1.osc, root1.lfo, root2.osc, root2.lfo, fifth.osc, fifth.lfo, octave.osc, octave.lfo];
-
-    // Fade-in gracefully
-    masterGain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 8.0);
+    playNextNote();
     setIsPlaying(true);
   };
 
   const stopSoundscape = () => {
-    const ctx = audioCtxRef.current;
-    const gain = masterGainRef.current;
+    if (melodyTimeoutRef.current) {
+      clearTimeout(melodyTimeoutRef.current);
+      melodyTimeoutRef.current = null;
+    }
 
-    if (ctx && gain && ctx.state === 'running') {
-      gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 3.0);
-
-      setTimeout(() => {
-        droneOscillatorsRef.current.forEach(osc => {
-          try { osc.stop(); } catch (e) {}
-        });
-        droneOscillatorsRef.current = [];
-        try { gain.disconnect(); } catch (e) {}
-        masterGainRef.current = null;
-      }, 3200);
-    } else {
-      droneOscillatorsRef.current.forEach(osc => {
-        try { osc.stop(); } catch (e) {}
-      });
-      droneOscillatorsRef.current = [];
+    if (masterGainRef.current) {
+      try {
+        masterGainRef.current.disconnect();
+      } catch (e) {}
       masterGainRef.current = null;
     }
     
     setIsPlaying(false);
   };
 
-  // Synthesize a cute ghost giggle sound effect
+  // Synthesize a cute, soft playful bubble pop sound instead of ghost wobble
   const playGhostGiggle = () => {
     initAudio();
     const ctx = audioCtxRef.current;
@@ -136,31 +110,19 @@ const useForestSounds = () => {
     const gain = ctx.createGain();
 
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(800, now);
-    osc.frequency.exponentialRampToValueAtTime(1600, now + 0.15);
-    osc.frequency.exponentialRampToValueAtTime(1000, now + 0.3);
-
-    // Wobble frequency for ghostly vibe
-    const wobble = ctx.createOscillator();
-    const wobbleGain = ctx.createGain();
-    wobble.frequency.value = 25; // 25Hz wobble
-    wobbleGain.gain.value = 150;
-
-    wobble.connect(wobbleGain);
-    wobbleGain.connect(osc.frequency);
+    // Fast frequency sweep upwards to make a "pop"
+    osc.frequency.setValueAtTime(600, now);
+    osc.frequency.exponentialRampToValueAtTime(1400, now + 0.08);
 
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.08, now + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+    gain.gain.linearRampToValueAtTime(0.06, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
 
-    wobble.start(now);
     osc.start(now);
-
-    wobble.stop(now + 0.4);
-    osc.stop(now + 0.4);
+    osc.stop(now + 0.13);
   };
 
   // Synthesize chime sound when offline activity is saved
@@ -418,7 +380,7 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
     }
   };
 
-  // Chat handler — routes to real Gemini API (online) or local fallback (offline)
+  // Chat handler — routes to real Gemini API (online) or queues for later (offline)
   const handleQueryLocalBot = async () => {
     if (!botQuery.trim()) return;
 
@@ -427,16 +389,37 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
     setBotQuery('');
 
     if (!isSimulatedOffline) {
-      // ===== ONLINE MODE: Call real Gemini API =====
+      // ===== ONLINE MODE: Call real Gemini API, also flush any queued offline questions =====
       setTfjsStatus('loading');
-      setTfjsProgress(50);
+      setTfjsProgress(30);
       try {
+        // Flush offline queue first (silently)
+        const storedQueue = JSON.parse(localStorage.getItem('vibe_offline_chat_queue') || '[]');
+        if (storedQueue.length > 0) {
+          for (const item of storedQueue) {
+            try {
+              const r = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: item.query, conversationHistory: [] })
+              });
+              if (r.ok) {
+                const d = await r.json();
+                const queuedAnswerEntry = { sender: 'betaal' as const, text: `📤 [Queued Answer for "${item.query}"]: ${d.reply}` };
+                setBotChatLogs(prev => [...prev, queuedAnswerEntry]);
+              }
+            } catch (e) {}
+          }
+          localStorage.removeItem('vibe_offline_chat_queue');
+        }
+
         // Build conversation history for context
         const conversationHistory = botChatLogs.slice(-8).map(log => ({
           role: log.sender === 'user' ? 'user' : 'model',
           text: log.text
         }));
 
+        setTfjsProgress(70);
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -453,30 +436,36 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
           const errData = await response.json().catch(() => ({}));
           setBotChatLogs(prev => [...prev, {
             sender: 'betaal',
-            text: errData.fallback || 'The celestial connection faltered! Betaal could not reach the wisdom servers. Please try again.'
+            text: errData.fallback || 'The celestial wisdom streams are busy. Please try again shortly, brave Vikram.'
           }]);
         }
       } catch (err) {
         setTfjsStatus('ready');
         setBotChatLogs(prev => [...prev, {
           sender: 'betaal',
-          text: 'Network error! Betaal retreats into the storm. Check your connection and try again, brave Vikram.'
+          text: '🌐 Could not connect to wisdom servers. Your question has been queued — Betaal will answer when the connection is restored.'
         }]);
+        // Queue this question for later
+        try {
+          const q = JSON.parse(localStorage.getItem('vibe_offline_chat_queue') || '[]');
+          q.push({ query: userText, timestamp: new Date().toISOString() });
+          localStorage.setItem('vibe_offline_chat_queue', JSON.stringify(q));
+        } catch (e) {}
       }
     } else {
-      // ===== OFFLINE MODE: Local keyword-matching + store in localStorage =====
+      // ===== OFFLINE MODE: Local keyword-matching + QUEUE question for real answer when online =====
       setTfjsStatus('ready');
       const reply = getOfflineBotReply(userText);
       setBotChatLogs(prev => {
         const updated = [...prev, { sender: 'betaal' as const, text: reply }];
-        // Persist offline conversations to localStorage
-        try {
-          const stored = JSON.parse(localStorage.getItem('vibe_offline_chat_logs') || '[]');
-          stored.push({ query: userText, reply, timestamp: new Date().toISOString() });
-          localStorage.setItem('vibe_offline_chat_logs', JSON.stringify(stored));
-        } catch (e) { /* ignore storage errors */ }
         return updated;
       });
+      // Queue the question to get a real AI answer when back online
+      try {
+        const q = JSON.parse(localStorage.getItem('vibe_offline_chat_queue') || '[]');
+        q.push({ query: userText, timestamp: new Date().toISOString() });
+        localStorage.setItem('vibe_offline_chat_queue', JSON.stringify(q));
+      } catch (e) {}
       playGhostGiggle();
     }
   };

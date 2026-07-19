@@ -7,6 +7,7 @@ interface HallOfRecordsProps {
   longestStreak: number;
   karmaPoints: number;
   userName: string;
+  avatar?: string;
   activeFlair?: string | null;
   logs?: any[];
   systemDate?: string;
@@ -28,6 +29,7 @@ export const HallOfRecords: React.FC<HallOfRecordsProps> = ({
   longestStreak,
   karmaPoints,
   userName,
+  avatar = "🎓",
   activeFlair = "neophyte",
   logs = [],
   systemDate
@@ -185,12 +187,12 @@ export const HallOfRecords: React.FC<HallOfRecordsProps> = ({
           title: currentStreak >= 15 ? "Vow Master Seeker" : "Novice Chronicle Seeker",
           streak: Math.max(currentStreak, longestStreak),
           karma: karmaPoints,
-          avatarSeed: "🎓",
+          avatarSeed: avatar,
           status: currentStreak > 0 ? "active" : "dormant"
         })
       }).catch(err => console.warn("Failed to update global leaderboard", err));
     }
-  }, [userName, currentStreak, longestStreak, karmaPoints]);
+  }, [userName, currentStreak, longestStreak, karmaPoints, avatar]);
 
   // Dynamic user entry compiled with real metrics
   const userEntry: Omit<LeaderboardEntry, 'rank' | 'isUser'> = {
@@ -198,7 +200,7 @@ export const HallOfRecords: React.FC<HallOfRecordsProps> = ({
     title: currentStreak >= 15 ? "Vow Master Seeker" : "Novice Chronicle Seeker",
     streak: Math.max(currentStreak, longestStreak),
     karma: karmaPoints,
-    avatarSeed: "⚔️",
+    avatarSeed: avatar,
     status: currentStreak > 0 ? "active" : "dormant"
   };
 
@@ -223,7 +225,7 @@ export const HallOfRecords: React.FC<HallOfRecordsProps> = ({
               title: (pState.currentStreak || 0) >= 15 ? "Vow Master Seeker" : "Novice Chronicle Seeker",
               streak: Math.max(pState.currentStreak || 0, pState.longestStreak || 0),
               karma: pState.karmaPoints || 0,
-              avatarSeed: "🎓",
+              avatarSeed: pState.avatar || "🎓",
               status: (pState.currentStreak || 0) > 0 ? "active" : "dormant"
             });
           }

@@ -47,4 +47,7 @@ export interface UserStreakState {
   streakFreezes?: number;
   riddleDifficulty?: 'mortal' | 'siddha' | 'yaksha';
   soundEnabled?: boolean;
+  department?: string;
+  track?: string;
+  avatar?: string;
 }

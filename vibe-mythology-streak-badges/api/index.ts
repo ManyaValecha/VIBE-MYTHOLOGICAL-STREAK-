@@ -456,7 +456,7 @@ Speak as: "Betaal speaks..." or use first person with occasional mythology metap
             msg &&
             typeof msg.role === "string" &&
             typeof msg.text === "string" &&
-            (msg.role === "user" || msg.role === "assistant")
+            (msg.role === "user" || msg.role === "model" || msg.role === "assistant")
           ) {
             contents.push({
               role: msg.role === "user" ? "user" : "model",

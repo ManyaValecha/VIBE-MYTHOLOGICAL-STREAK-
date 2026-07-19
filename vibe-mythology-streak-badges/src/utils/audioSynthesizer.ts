@@ -51,122 +51,81 @@ class MythologyAudioEngine {
     return this.isEnabled;
   }
 
+  private melodyTimeout: any = null;
+
   /**
-   * Starts a soft, peaceful meditation pad soundscape (A=432Hz inspired).
-   * Synthesizes a deep, relaxing binaural-like drone using slow LFOs.
+   * Starts a soft, playful music-box style ambient soundscape.
+   * Generates a slow, gentle pentatonic arpeggio using soft triangle waves.
    */
   private startAmbientSoundscape() {
     if (!this.ctx || !this.isEnabled) return;
     
-    // Safety check: clear any running drone first
     this.stopAmbientSoundscape();
 
     try {
       const ctx = this.ctx;
       
-      // Master Gain (very gentle and soothing)
+      // Master gain for the music box (gentle volume)
       this.droneGain = ctx.createGain();
-      this.droneGain.gain.setValueAtTime(0, ctx.currentTime);
-
-      // Gentle lowpass filter for warmth
-      this.filterNode = ctx.createBiquadFilter();
-      this.filterNode.type = 'lowpass';
-      this.filterNode.frequency.setValueAtTime(400, ctx.currentTime);
-      this.filterNode.Q.setValueAtTime(0.5, ctx.currentTime);
-
-      this.filterNode.connect(this.droneGain);
+      this.droneGain.gain.setValueAtTime(0.08, ctx.currentTime);
       this.droneGain.connect(ctx.destination);
 
-      // Create a majestic meditation chord (E major pentatonic roots)
-      const baseFreq = 108; // Deep meditative root (A=432Hz mathematical derivative)
+      // C major pentatonic scale notes (C5, D5, E5, G5, A5, C6)
+      const scale = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50];
       
-      const createSoothingOscillator = (freq: number, detune: number, volume: number) => {
+      const playNextPlayfulNote = () => {
+        if (!this.ctx || !this.isEnabled || !this.droneGain) return;
+        const now = ctx.currentTime;
+        
+        // Randomly select a note from our scale
+        const freq = scale[Math.floor(Math.random() * scale.length)];
+        
+        // Create a very soft, pure tone (triangle wave behaves like a soft music box)
         const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
+        const noteGain = ctx.createGain();
         
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-        osc.detune.value = detune; // Slight detune for binaural chorusing effect
-
-        gain.gain.value = volume;
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now);
         
-        // Slow LFO for volume pulsing (breathing effect)
-        const lfo = ctx.createOscillator();
-        const lfoGain = ctx.createGain();
-        lfo.type = 'sine';
-        lfo.frequency.value = 0.05 + (Math.random() * 0.03); // Very slow breath (10-20 seconds)
-        lfoGain.gain.value = volume * 0.4;
-        lfo.connect(lfoGain);
-        lfoGain.connect(gain.gain);
-        lfo.start();
-
-        osc.connect(gain);
-        if (this.filterNode) {
-          gain.connect(this.filterNode);
-        }
-
-        osc.start();
-        return { osc, lfo };
+        // Music box envelope: instant attack, long gentle decay
+        noteGain.gain.setValueAtTime(0, now);
+        noteGain.gain.linearRampToValueAtTime(0.05, now + 0.05);
+        noteGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.5);
+        
+        osc.connect(noteGain);
+        noteGain.connect(this.droneGain);
+        
+        osc.start(now);
+        osc.stop(now + 2.6);
+        
+        // Schedule next note in 2 to 4 seconds (organic pacing)
+        const nextTime = 2000 + Math.random() * 2000;
+        this.melodyTimeout = setTimeout(playNextPlayfulNote, nextTime);
       };
 
-      // Root note + slightly detuned for thickness
-      const root1 = createSoothingOscillator(baseFreq, -3, 0.2);
-      const root2 = createSoothingOscillator(baseFreq, 3, 0.2);
-      
-      // Fifth (B)
-      const fifth = createSoothingOscillator(baseFreq * 1.5, 0, 0.1);
-      
-      // Octave higher root
-      const octave = createSoothingOscillator(baseFreq * 2, 2, 0.05);
-
-      // Store references for cleanup
-      this.droneOscillators = [root1.osc, root1.lfo, root2.osc, root2.lfo, fifth.osc, fifth.lfo, octave.osc, octave.lfo];
-
-      // Fade-in gracefully over 8 seconds for a deeply relaxing entry
-      this.droneGain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 8.0);
+      playNextPlayfulNote();
     } catch (e) {
-      console.error('Failed to initialize soothing soundscape', e);
+      console.error('Failed to initialize playful soundscape', e);
     }
   }
 
   /**
-   * Fades out and tears down the ambient soundscape gracefully.
+   * Tears down the ambient soundscape gracefully.
    */
   private stopAmbientSoundscape() {
-    const currentGain = this.droneGain;
-    const currentOscillators = this.droneOscillators;
-    const ctx = this.ctx;
-
-    if (currentGain && ctx && ctx.state === 'running') {
-      try {
-        // Fade out drone slowly to prevent pops (3 seconds)
-        currentGain.gain.setValueAtTime(currentGain.gain.value, ctx.currentTime);
-        currentGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 3.0);
-
-        setTimeout(() => {
-          try {
-            currentOscillators.forEach(osc => {
-              try { osc.stop(); } catch (e) {}
-            });
-            currentGain.disconnect();
-          } catch (err) {
-            // Ignore
-          }
-        }, 3200);
-      } catch (e) {
-        console.error('Error stopping soundscape gracefully', e);
-      }
-    } else {
-      // Force stop if context is suspended or gain is detached
-      currentOscillators.forEach(osc => {
-        try { osc.stop(); } catch (e) {}
-      });
+    if (this.melodyTimeout) {
+      clearTimeout(this.melodyTimeout);
+      this.melodyTimeout = null;
     }
 
-    this.droneGain = null;
+    if (this.droneGain) {
+      try {
+        this.droneGain.disconnect();
+      } catch (err) {}
+      this.droneGain = null;
+    }
+    
     this.droneOscillators = [];
-    this.lfoNode = null;
-    this.filterNode = null;
   }
 
   /**

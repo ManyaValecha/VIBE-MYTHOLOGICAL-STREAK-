@@ -332,6 +332,7 @@ function parseInlineFormatting(text: string): React.ReactNode {
 }
 
 import { StudentProfileManager } from './components/StudentProfileManager';
+import { StudentLoginPage } from './components/StudentLoginPage';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<string | null>(() => {
@@ -360,14 +361,66 @@ export default function App() {
     return DEFAULT_STATE;
   });
 
+  const handleLogin = (username: string, details: { department: string; track: string; avatar: string }) => {
+    try {
+      const allProfiles = JSON.parse(localStorage.getItem('vibe_profiles') || '{}');
+      let userState = allProfiles[username];
+      if (!userState) {
+        userState = {
+          ...DEFAULT_STATE,
+          department: details.department,
+          track: details.track,
+          avatar: details.avatar,
+        };
+      } else {
+        // Merge or update details
+        userState = {
+          ...userState,
+          department: details.department || userState.department,
+          track: details.track || userState.track,
+          avatar: details.avatar || userState.avatar,
+        };
+      }
+      allProfiles[username] = userState;
+      localStorage.setItem('vibe_profiles', JSON.stringify(allProfiles));
+      localStorage.setItem('vibe_current_profile', username);
+      
+      setState(userState);
+      setCurrentUser(username);
+
+      // Play soft chime
+      audioSynthesizer.playMilestoneChime();
+      triggerNotification(`Welcome, ${username}! Let the streak begin.`, 'info');
+
+      // Post to global leaderboard
+      fetch('/api/leaderboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: username,
+          title: userState.currentStreak >= 15 ? "Vow Master Seeker" : "Novice Chronicle Seeker",
+          streak: Math.max(userState.currentStreak, userState.longestStreak),
+          karma: userState.karmaPoints,
+          avatarSeed: details.avatar || "🎓",
+          status: userState.currentStreak > 0 ? "active" : "dormant"
+        })
+      }).catch(err => console.warn("Failed to update global leaderboard", err));
+    } catch (e) {}
+  };
+
   const handleSwitchUser = (username: string) => {
     try {
       const allProfiles = JSON.parse(localStorage.getItem('vibe_profiles') || '{}');
       if (allProfiles[username]) {
         setState(allProfiles[username]);
       } else {
-        // New user registration
-        const newState = { ...DEFAULT_STATE };
+        // New user registration defaults
+        const newState = {
+          ...DEFAULT_STATE,
+          avatar: '🎓',
+          department: 'Computer Science & Engineering',
+          track: 'vibe-github-tutorial'
+        };
         allProfiles[username] = newState;
         localStorage.setItem('vibe_profiles', JSON.stringify(allProfiles));
         setState(newState);
@@ -813,6 +866,10 @@ export default function App() {
     localStorage.removeItem('vibe_streak_state');
     triggerNotification('🔄 Simulator reset to initial Day 1 state.', 'info');
   };
+
+  if (!currentUser) {
+    return <StudentLoginPage onLogin={handleLogin} />;
+  }
 
   return (
     <div 
@@ -1564,6 +1621,7 @@ export default function App() {
               longestStreak={state.longestStreak}
               karmaPoints={state.karmaPoints}
               userName={currentUser || "Guest"}
+              avatar={state.avatar || "🎓"}
               activeFlair={state.activeFlair}
               logs={state.logs}
               systemDate={state.systemDate}
