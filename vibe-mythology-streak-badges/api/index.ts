@@ -445,7 +445,7 @@ app.get("/api/lesson-content", async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// API: Gemini Chat — PROMPT INJECTION PROTECTED
+// API: Betaal AI Chat (Cohere) — PROMPT INJECTION PROTECTED
 // ============================================================
 app.post("/api/chat", async (req: Request, res: Response) => {
   const { message, conversationHistory } = req.body;
@@ -491,7 +491,7 @@ IMPORTANT RULES:
     console.error("[API/chat] Error:", error.message);
     res.status(500).json({
       error: "Chat unavailable",
-      fallback: "Betaal retreats into the storm! The celestial connection is severed. Please try again shortly, brave Vikram.",
+      fallback: "Betaal meditates in silence. The sacred scroll is temporarily unavailable. Please try again in a moment, brave Vikram.",
     });
   }
 });

@@ -382,7 +382,7 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
     }
   };
 
-  // Chat handler — routes to real Gemini API (online) or queues for later (offline)
+  // Chat handler — routes to real Cohere AI API (online) or queues for later (offline)
   const handleQueryLocalBot = async () => {
     if (!botQuery.trim()) return;
 
@@ -391,7 +391,7 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
     setBotQuery('');
 
     if (!isSimulatedOffline) {
-      // ===== ONLINE MODE: Call real Gemini API, also flush any queued offline questions =====
+      // ===== ONLINE MODE: Call real Cohere AI API, also flush any queued offline questions =====
       setTfjsStatus('loading');
       setTfjsProgress(30);
       try {
@@ -441,7 +441,7 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
           const data = await response.json();
           setBotChatLogs(prev => [...prev, { sender: 'betaal', text: data.reply }]);
         } else {
-          // If Gemini API fails (e.g. 429 quota exceeded), gracefully fallback to local offline knowledge
+          // If Cohere API fails, gracefully fallback to local offline knowledge
           const reply = getOfflineBotReply(userText);
           setBotChatLogs(prev => [...prev, {
             sender: 'betaal',
@@ -901,7 +901,7 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
           </div>
         </div>
 
-        {/* COLUMN 3: ViBe AI Chatbot — Gemini online, local offline */}
+        {/* COLUMN 3: ViBe AI Chatbot — Cohere AI online, local offline */}
         <div className="lg:col-span-4 flex flex-col gap-4">
           <div className={`bg-slate-900/60 border rounded-xl p-4 flex-1 flex flex-col justify-between transition-all duration-500 ${
             isSimulatedOffline ? 'border-amber-500/20' : 'border-emerald-500/20'
@@ -910,7 +910,7 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
               <h3 className="text-xs font-bold text-slate-200 font-mono tracking-widest uppercase mb-1.5 flex items-center gap-1.5 border-b border-slate-950 pb-1.5">
                 {isSimulatedOffline
                   ? '📴 Betaal AI (Offline Local Knowledge)'
-                  : '🤖 Betaal AI (Gemini-Powered — Live)'}
+                  : '🤖 Betaal AI (Cohere AI — Live)'}
               </h3>
               <div className={`text-[9px] font-mono mb-2 flex items-center gap-1 ${
                 isSimulatedOffline ? 'text-amber-400' : 'text-emerald-400'
@@ -918,7 +918,7 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
                 <span className={`w-1.5 h-1.5 rounded-full ${isSimulatedOffline ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
                 {isSimulatedOffline
                   ? 'Offline — Using local knowledge base. Conversations stored in localStorage.'
-                  : 'Online — Connected to Gemini AI. Real-time accurate answers.'}
+                  : 'Online — Connected to Cohere AI. Real-time accurate answers.'}
               </div>
 
               {/* Chat log box */}
@@ -945,7 +945,7 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
               {tfjsStatus === 'loading' && (
                 <div className="mt-2 bg-slate-950 border border-slate-900 rounded-lg p-2">
                   <div className="flex justify-between text-[9px] font-mono text-slate-500 mb-1">
-                    <span>{isSimulatedOffline ? 'Processing locally...' : 'Querying Gemini AI...'}</span>
+                    <span>{isSimulatedOffline ? 'Processing locally...' : 'Querying Cohere AI...'}</span>
                     <span>{tfjsProgress}%</span>
                   </div>
                   <div className="w-full bg-slate-900 h-1 rounded-full overflow-hidden">
@@ -959,7 +959,7 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
                   isSimulatedOffline ? 'text-amber-400' : 'text-emerald-400'
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isSimulatedOffline ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-                  <span>{isSimulatedOffline ? 'Local knowledge base active — answers cached in localStorage' : 'Gemini AI connected — getting real-time answers'}</span>
+                  <span>{isSimulatedOffline ? 'Local knowledge base active — answers cached in localStorage' : 'Cohere AI connected — getting real-time answers'}</span>
                 </div>
               )}
             </div>
