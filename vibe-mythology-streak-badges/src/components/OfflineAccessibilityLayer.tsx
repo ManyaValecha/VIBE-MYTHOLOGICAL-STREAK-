@@ -433,18 +433,25 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
           const data = await response.json();
           setBotChatLogs(prev => [...prev, { sender: 'betaal', text: data.reply }]);
         } else {
-          const errData = await response.json().catch(() => ({}));
+          // If Gemini API fails (e.g. 429 quota exceeded), gracefully fallback to local offline knowledge
+          const reply = getOfflineBotReply(userText);
           setBotChatLogs(prev => [...prev, {
             sender: 'betaal',
-            text: errData.fallback || 'The celestial wisdom streams are busy. Please try again shortly, brave Vikram.'
+            text: `⚠️ [API Quota Exceeded — Falling back to local wisdom]\n\n${reply}`
           }]);
+          playGhostGiggle();
         }
       } catch (err) {
         setTfjsStatus('ready');
+        // If network error, gracefully fallback to local offline knowledge
+        const reply = getOfflineBotReply(userText);
         setBotChatLogs(prev => [...prev, {
           sender: 'betaal',
-          text: '🌐 Could not connect to wisdom servers. Your question has been queued — Betaal will answer when the connection is restored.'
+          text: `🌐 [Network Error — Falling back to local wisdom]\n\n${reply}`
         }]);
+        playGhostGiggle();
+        
+        // Queue this question for later when API is back
         // Queue this question for later
         try {
           const q = JSON.parse(localStorage.getItem('vibe_offline_chat_queue') || '[]');

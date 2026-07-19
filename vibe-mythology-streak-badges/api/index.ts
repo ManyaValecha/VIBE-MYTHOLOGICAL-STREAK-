@@ -703,42 +703,8 @@ app.post("/api/leaderboard", leaderboardWriteLimiter, (req: Request, res: Respon
 });
 
 app.get("/api/leaderboard", async (_req: Request, res: Response) => {
-  try {
-    const response = await fetch("https://api.github.com/repos/vicharanashala/vibe/contributors?per_page=15", {
-      headers: { "User-Agent": "aistudio-build" },
-      signal: AbortSignal.timeout(5000), // 5 second timeout to prevent hanging
-    });
-
-    if (!response.ok) throw new Error("GitHub API error");
-
-    const contributors: any[] = await response.json();
-
-    const titles = [
-      "Prime ViBe Architect", "Vanguard Scribe of Code", "Sovereign Portal Guardian",
-      "Grand High Compiler", "Chronicle Repository Scribe", "Mystical Quality Assurer",
-      "Karmic Logic Weaver", "Siddha Interface Mason", "Scribe of the Core Routes",
-    ];
-
-    const mapped = contributors
-      .filter((c) => c && typeof c.login === "string") // Validate GitHub response
-      .map((c, index) => ({
-        name: c.login.slice(0, 50),
-        title: titles[index % titles.length],
-        streak: safeNumber(Math.min(108, Math.max(3, (c.contributions || 1) * 2)), 0, 108, 3),
-        karma: safeNumber(Math.min(5000, (c.contributions || 1) * 100 + 150), 0, 5000, 150),
-        avatarSeed: typeof c.avatar_url === "string" ? c.avatar_url : "🏅",
-        status: "active" as const,
-      }));
-
-    const liveNames = IN_MEMORY_LEADERBOARD.map((u) => u.name.toLowerCase());
-    const filteredMapped = mapped.filter((c) => !liveNames.includes(c.name.toLowerCase()));
-
-    res.json([...IN_MEMORY_LEADERBOARD, ...filteredMapped]);
-  } catch {
-    const liveNames = IN_MEMORY_LEADERBOARD.map((u) => u.name.toLowerCase());
-    const filteredFallback = FALLBACK_CONTRIBUTORS.filter((c) => !liveNames.includes(c.name.toLowerCase()));
-    res.json([...IN_MEMORY_LEADERBOARD, ...filteredFallback]);
-  }
+  // Only return real registered users
+  res.json(IN_MEMORY_LEADERBOARD);
 });
 
 // ============================================================
