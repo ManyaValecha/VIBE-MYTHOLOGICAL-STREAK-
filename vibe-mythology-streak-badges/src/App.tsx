@@ -335,56 +335,70 @@ import { StudentProfileManager } from './components/StudentProfileManager';
 import { StudentLoginPage } from './components/StudentLoginPage';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<string | null>(() => {
-    return localStorage.getItem('vibe_current_profile');
-  });
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [sessionKey, setSessionKey] = useState<string | null>(null);
 
-  const [state, setState] = useState<UserStreakState>(() => {
-    const activeUser = localStorage.getItem('vibe_current_profile');
-    if (activeUser) {
-      try {
-        const allProfiles = JSON.parse(localStorage.getItem('vibe_profiles') || '{}');
-        if (allProfiles[activeUser]) {
-          return allProfiles[activeUser];
-        }
-      } catch(e) {}
-    }
-    // Fallback for legacy state
-    const saved = localStorage.getItem('vibe_streak_state');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse saved state', e);
-      }
-    }
-    return DEFAULT_STATE;
-  });
+  const [state, setState] = useState<UserStreakState>(DEFAULT_STATE);
 
-  const handleLogin = (username: string, details: { department: string; track: string; avatar: string }) => {
+  const handleLogin = (username: string, details: { department: string; track: string; avatar: string }, passcode: string) => {
     try {
+      const { deriveKey, hashPasscode, encryptData, decryptData } = require('./utils/crypto');
+      const key = deriveKey(passcode);
+      const hash = hashPasscode(passcode);
+
       const allProfiles = JSON.parse(localStorage.getItem('vibe_profiles') || '{}');
-      let userState = allProfiles[username];
-      if (!userState) {
+      let userEntry = allProfiles[username];
+      let userState;
+
+      if (!userEntry) {
         userState = {
           ...DEFAULT_STATE,
           department: details.department,
           track: details.track,
           avatar: details.avatar,
         };
-      } else {
-        // Merge or update details
-        userState = {
-          ...userState,
-          department: details.department || userState.department,
-          track: details.track || userState.track,
-          avatar: details.avatar || userState.avatar,
+        allProfiles[username] = {
+          passcodeHash: hash,
+          encryptedState: encryptData(userState, key)
         };
+      } else {
+        // If it's a legacy unencrypted profile, userEntry will just be the state object (no passcodeHash)
+        // We will force overwrite it if there's no passcodeHash.
+        if (!userEntry.passcodeHash) {
+          userState = {
+            ...DEFAULT_STATE,
+            ...userEntry,
+            department: details.department || userEntry.department,
+            track: details.track || userEntry.track,
+            avatar: details.avatar || userEntry.avatar,
+          };
+          allProfiles[username] = {
+            passcodeHash: hash,
+            encryptedState: encryptData(userState, key)
+          };
+        } else {
+          if (userEntry.passcodeHash !== hash) {
+            triggerNotification("Incorrect secure passcode!", "error");
+            return;
+          }
+          userState = decryptData(userEntry.encryptedState, key);
+          if (!userState) {
+            triggerNotification("Data corruption or decryption failed.", "error");
+            return;
+          }
+          userState = {
+            ...userState,
+            department: details.department || userState.department,
+            track: details.track || userState.track,
+            avatar: details.avatar || userState.avatar,
+          };
+          allProfiles[username].encryptedState = encryptData(userState, key);
+        }
       }
-      allProfiles[username] = userState;
+
       localStorage.setItem('vibe_profiles', JSON.stringify(allProfiles));
-      localStorage.setItem('vibe_current_profile', username);
       
+      setSessionKey(key);
       setState(userState);
       setCurrentUser(username);
 
@@ -393,9 +407,13 @@ export default function App() {
       triggerNotification(`Welcome, ${username}! Let the streak begin.`, 'info');
 
       // Post to global leaderboard
+      const token = localStorage.getItem('vibe_auth_token') || 'temp_token';
       fetch('/api/leaderboard', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify({
           name: username,
           title: userState.currentStreak >= 15 ? "Vow Master Seeker" : "Novice Chronicle Seeker",
@@ -405,35 +423,20 @@ export default function App() {
           status: userState.currentStreak > 0 ? "active" : "dormant"
         })
       }).catch(err => console.warn("Failed to update global leaderboard", err));
-    } catch (e) {}
+    } catch (e) {
+      console.error(e);
+      triggerNotification("Encryption error during login.", "error");
+    }
   };
 
   const handleSwitchUser = (username: string) => {
-    try {
-      const allProfiles = JSON.parse(localStorage.getItem('vibe_profiles') || '{}');
-      if (allProfiles[username]) {
-        setState(allProfiles[username]);
-      } else {
-        // New user registration defaults
-        const newState = {
-          ...DEFAULT_STATE,
-          avatar: '🎓',
-          department: 'Computer Science & Engineering',
-          track: 'vibe-github-tutorial'
-        };
-        allProfiles[username] = newState;
-        localStorage.setItem('vibe_profiles', JSON.stringify(allProfiles));
-        setState(newState);
-      }
-      setCurrentUser(username);
-      localStorage.setItem('vibe_current_profile', username);
-      triggerNotification(`Welcome, ${username}! Let the streak begin.`, 'info');
-    } catch(e) {}
+    // If they want to switch user, we just logout so they go to the login page and enter passcode
+    handleLogout();
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('vibe_current_profile');
+    setSessionKey(null);
     setState(DEFAULT_STATE);
   };
 
@@ -602,20 +605,25 @@ export default function App() {
     triggerNotification('🔮 Portal fully unlocked. Welcome to Vikram-Betaal Chronicles!', 'success');
   };
 
-  // Sync state to local storage
+  // Sync state to local storage securely
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && sessionKey) {
       try {
+        const { encryptData } = require('./utils/crypto');
         const allProfiles = JSON.parse(localStorage.getItem('vibe_profiles') || '{}');
-        allProfiles[currentUser] = state;
-        localStorage.setItem('vibe_profiles', JSON.stringify(allProfiles));
+        
+        // Preserve passcodeHash and just update encryptedState
+        if (allProfiles[currentUser]) {
+          allProfiles[currentUser].encryptedState = encryptData(state, sessionKey);
+          localStorage.setItem('vibe_profiles', JSON.stringify(allProfiles));
+        }
       } catch (e) {
-        console.error('Failed to save profile state', e);
+        console.error('Failed to save securely encrypted profile state', e);
       }
-    } else {
+    } else if (!currentUser) {
       localStorage.setItem('vibe_streak_state', JSON.stringify(state));
     }
-  }, [state, currentUser]);
+  }, [state, currentUser, sessionKey]);
 
   // Handle autoplay constraints for mythological soundscapes
   useEffect(() => {
@@ -1222,6 +1230,7 @@ export default function App() {
             activitiesLoggedToday={state.activitiesLoggedToday}
             isSimulatedOffline={isSimulatedOffline}
             setIsSimulatedOffline={setIsSimulatedOffline}
+            sessionKey={sessionKey}
             courses={REAL_COURSES}
             onLogActivity={(id, name, type, points) => handleLogActivity(id, name, type, points)}
             onSyncComplete={(syncResults) => {
@@ -1938,9 +1947,13 @@ export default function App() {
                     setIsGeneratingRiddle(true);
                     try {
                       const course = REAL_COURSES.find(c => c.id === selectedCourseId);
+                      const token = localStorage.getItem('vibe_auth_token') || 'temp_token';
                       const res = await fetch('/api/generate-riddle', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${token}` 
+                        },
                         body: JSON.stringify({
                           lessonTitle: selectedLesson,
                           category: course?.category,

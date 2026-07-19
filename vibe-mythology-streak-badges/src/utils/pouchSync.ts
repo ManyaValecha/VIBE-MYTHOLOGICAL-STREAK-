@@ -103,10 +103,12 @@ export async function syncOfflineDataToServer(
     console.log(`[SyncEngine] Syncing ${pouchDocs.length} PouchDB docs and ${indexedMetrics.length} IndexedDB metrics to server...`);
 
     // 2. Push to the backend server API for synchronization
+    const token = localStorage.getItem('vibe_auth_token') || 'temp_token';
     const response = await fetch('/api/pouch-sync', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
         currentStreak,

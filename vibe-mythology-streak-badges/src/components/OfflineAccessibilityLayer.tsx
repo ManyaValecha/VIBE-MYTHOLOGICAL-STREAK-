@@ -18,6 +18,7 @@ interface OfflineAccessibilityLayerProps {
   }) => void;
   onLogActivity: (id: string, name: string, type: 'spaced-rep' | 'quiz' | 'video' | 'confusion' | 'question', points: number) => void;
   courses: any[];
+  sessionKey: string | null;
 }
 
 // Custom hook to handle Web Audio API synthesized bird song soundscape and sound effects
@@ -191,7 +192,8 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
   setIsSimulatedOffline,
   onSyncComplete,
   onLogActivity,
-  courses
+  courses,
+  sessionKey
 }) => {
   const { isPlaying, startSoundscape, stopSoundscape, playGhostGiggle, playChime, playSyncSuccessSound } = useForestSounds();
 
@@ -394,23 +396,26 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
       setTfjsProgress(30);
       try {
         // Flush offline queue first (silently)
-        const storedQueue = JSON.parse(localStorage.getItem('vibe_offline_chat_queue') || '[]');
+        const storedQueue = getSecureQueue(sessionKey);
         if (storedQueue.length > 0) {
           for (const item of storedQueue) {
             try {
               const r = await fetch('/api/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: item.query, conversationHistory: [] })
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer temp_token`
+                },
+                body: JSON.stringify({ message: item.message, conversationHistory: [] })
               });
               if (r.ok) {
                 const d = await r.json();
-                const queuedAnswerEntry = { sender: 'betaal' as const, text: `📤 [Queued Answer for "${item.query}"]: ${d.reply}` };
+                const queuedAnswerEntry = { sender: 'betaal' as const, text: `📤 [Queued Answer for "${item.message}"]: ${d.reply}` };
                 setBotChatLogs(prev => [...prev, queuedAnswerEntry]);
               }
             } catch (e) {}
           }
-          localStorage.removeItem('vibe_offline_chat_queue');
+          saveSecureQueue([], sessionKey);
         }
 
         // Build conversation history for context
@@ -422,7 +427,10 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
         setTfjsProgress(70);
         const response = await fetch('/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer temp_token`
+          },
           body: JSON.stringify({ message: userText, conversationHistory })
         });
 
@@ -451,12 +459,13 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
         }]);
         playGhostGiggle();
         
-        // Queue this question for later when API is back
         // Queue this question for later
         try {
-          const q = JSON.parse(localStorage.getItem('vibe_offline_chat_queue') || '[]');
-          q.push({ query: userText, timestamp: new Date().toISOString() });
-          localStorage.setItem('vibe_offline_chat_queue', JSON.stringify(q));
+          if (sessionKey) {
+            const q = getSecureQueue(sessionKey);
+            q.push({ message: userText, timestamp: new Date().toISOString() });
+            saveSecureQueue(q, sessionKey);
+          }
         } catch (e) {}
       }
     } else {
@@ -469,9 +478,11 @@ export const OfflineAccessibilityLayer: React.FC<OfflineAccessibilityLayerProps>
       });
       // Queue the question to get a real AI answer when back online
       try {
-        const q = JSON.parse(localStorage.getItem('vibe_offline_chat_queue') || '[]');
-        q.push({ query: userText, timestamp: new Date().toISOString() });
-        localStorage.setItem('vibe_offline_chat_queue', JSON.stringify(q));
+        if (sessionKey) {
+          const q = getSecureQueue(sessionKey);
+          q.push({ message: userText, timestamp: new Date().toISOString() });
+          saveSecureQueue(q, sessionKey);
+        }
       } catch (e) {}
       playGhostGiggle();
     }

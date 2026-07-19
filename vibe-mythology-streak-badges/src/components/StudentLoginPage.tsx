@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, Shield, GraduationCap, ArrowRight, Award } from 'lucide-react';
 
 interface StudentLoginPageProps {
-  onLogin: (username: string, details: { department: string; track: string; avatar: string }) => void;
+  onLogin: (username: string, details: { department: string; track: string; avatar: string }, passcode: string) => void;
 }
 
 const DEPARTMENTS = [
@@ -27,6 +27,7 @@ const AVATARS = ['🎓', '⚔️', '🛡️', '👑', '🔮', '📜', '🧙‍�
 
 export const StudentLoginPage: React.FC<StudentLoginPageProps> = ({ onLogin }) => {
   const [name, setName] = useState('');
+  const [passcode, setPasscode] = useState('');
   const [department, setDepartment] = useState(DEPARTMENTS[0]);
   const [track, setTrack] = useState(TRACKS[0].id);
   const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
@@ -47,7 +48,12 @@ export const StudentLoginPage: React.FC<StudentLoginPageProps> = ({ onLogin }) =
       return;
     }
 
-    onLogin(cleanName, { department, track, avatar: selectedAvatar });
+    if (passcode.length < 4) {
+      setError('Passcode must be at least 4 characters long.');
+      return;
+    }
+
+    onLogin(cleanName, { department, track, avatar: selectedAvatar }, passcode);
   };
 
   return (
@@ -96,6 +102,27 @@ export const StudentLoginPage: React.FC<StudentLoginPageProps> = ({ onLogin }) =
               maxLength={30}
               className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-serif"
             />
+          </div>
+
+          {/* Secure Passcode Input */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-indigo-300 uppercase tracking-widest flex items-center gap-2">
+              <Shield className="w-3.5 h-3.5" />
+              Secure Passcode
+            </label>
+            <input
+              type="password"
+              required
+              placeholder="Enter PIN or Password"
+              value={passcode}
+              onChange={(e) => {
+                setPasscode(e.target.value);
+                setError('');
+              }}
+              maxLength={50}
+              className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono"
+            />
+            <p className="text-[10px] text-slate-500 italic">This securely encrypts your local progress.</p>
           </div>
 
           {/* Department Select */}
